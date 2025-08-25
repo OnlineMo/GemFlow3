@@ -101,6 +101,8 @@ jobs:
           CLASSIFIER_BASE_URL: ${{ env.CLASSIFIER_BASE_URL }}
           CLASSIFIER_MODEL: ${{ env.CLASSIFIER_MODEL }}
           CLASSIFIER_TOKEN: ${{ env.CLASSIFIER_TOKEN }}
+          MAX_REPORTS_PER_RUN: ${{ vars.MAX_REPORTS_PER_RUN || '5' }}
+          
         run: |
           python Flow/main_workflow.py
 
