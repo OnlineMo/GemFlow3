@@ -15,8 +15,8 @@ dependencies = [
     "python-dotenv>=1.0.1",
     "langgraph-sdk>=0.1.57",
     "langgraph-cli",
-    "langgraph-api",
     "fastapi",
+    "uvicorn[standard]>=0.30.0",
     "google-genai",
 ]
 
