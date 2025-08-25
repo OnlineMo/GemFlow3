@@ -2,7 +2,7 @@
 
 本仓库集成了“GemFlow3 编排 + DeepResearch-Archive 内容归档展示 + LangGraph DeepResearch 引擎”一体化方案，实现每日自动抓取热点、生成结构化 Markdown 报告、推送到DeepResearch-Archive，并自动更新 NAVIGATION.md 与 README 最新报告区块。
 
-- 编排侧 Library A: Python 工作流，负责抓取→候选生成→分类→调用引擎→落DeepResearch-Archive→更新导航与首页→幂等记录
+- 编排侧 Gemflow3: Python 工作流，负责抓取→候选生成→分类→调用引擎→落DeepResearch-Archive→更新导航与首页→幂等记录
 - 引擎侧: 使用 Google Gemini + LangGraph 的研究代理，通过 web 搜索与反思迭代完成深入研究并产出可引用的回答
 - 运行形态: GitHub Actions 内部基于 docker-compose 拉起引擎 http://localhost:8123 ，然后执行GemFlow3 主流程
 
