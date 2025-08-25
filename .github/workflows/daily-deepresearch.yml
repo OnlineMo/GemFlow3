@@ -58,7 +58,7 @@ jobs:
           set -e
           echo "Waiting for engine http://localhost:8123 ..."
           for i in $(seq 1 80); do
-            if curl -fsS http://localhost:8123/openapi.json >/dev/null 2>&1; then
+            if curl -fsS http://localhost:8123/healthz >/dev/null 2>&1 || curl -fsS http://localhost:8123/openapi.json >/dev/null 2>&1; then
               echo "Engine is ready"
               exit 0
             fi
