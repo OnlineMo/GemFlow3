@@ -138,9 +138,6 @@ class GitHubRepoClient:
         current_content = None
         if current and isinstance(current, dict):
             current_sha = current.get("sha")
-            # 某些返回无 content, 为节省流量 GitHub 默认省略。此处再调一次 raw api 拉原文会复杂。
-            # 我们退而求其次: 先 PUT, 若 server 认为内容未变也会拒绝或返回相同 sha。
-            # 为减少不必要 PUT, 可在调用侧提供内容哈希判断(建议)。
         try:
             resp = self.put_file(path, new_content, commit_message, branch=branch, sha=current_sha)
             LOG.info("file_put", extra={"path": path, "status": "updated" if current_sha else "created"})

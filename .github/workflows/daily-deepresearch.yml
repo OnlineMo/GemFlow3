@@ -2,7 +2,7 @@ name: Daily DeepResearch
 
 on:
   schedule:
-    - cron: '0 16 * * *'  # 北京时间每日 00:00 运行（UTC+8 → UTC-8 差 16h）
+    - cron: '0 16 * * *'  # 北京时间每日 00:00 运行
   workflow_dispatch:
 
 permissions:
@@ -95,7 +95,6 @@ jobs:
           REPO_B: owner/DeepResearch-Archive
           DEEPRESEARCH_BASE_URL: http://localhost:8123
           TZ: Asia/Shanghai
-          # 为 Flow 进程提供分类所需的 Token 回退来源（仅当 CLASSIFIER_KIND=gemini 才使用）
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CLASSIFY_WITH_AI: ${{ env.CLASSIFY_WITH_AI }}
           CLASSIFIER_KIND: ${{ env.CLASSIFIER_KIND }}

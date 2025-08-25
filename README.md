@@ -111,20 +111,37 @@ DRY_RUN=1 python Flow/main_workflow.py
 - 触发: 北京时间每日 00:00
 - 步骤: 构建镜像 → docker-compose 启动 LangGraph API → 探活 http://localhost:8123/openapi.json → 执行 [Flow/main_workflow.py](Flow/main_workflow.py) → 更新库 B → 清理
 
-在 GitHub 仓库 gemflow3 的 Settings → Secrets and variables → Actions 中配置以下 Secrets:
-- REPO_B_TOKEN: 细粒度 PAT（仅 contents: write）指向库 B
-- GEMINI_API_KEY: Google Gemini API 密钥
-- LANGSMITH_API_KEY: LangSmith API 密钥（仅用于 docker-compose 示例）
+在 GitHub 仓库 gemflow3 的 Settings → Secrets and variables → Actions 中配置：
 
-环境变量注入见工作流中的 Run daily workflow 步骤：
-- REPO_B: owner/DeepResearch-Archive（如需修改库 B，请同步更新）
-- DEEPRESEARCH_BASE_URL: http://localhost:8123
-- TZ: Asia/Shanghai
-- 可选：CLASSIFY_WITH_AI: false
-- 可选：CLASSIFIER_KIND: gemini | openai_compat | service
-- 可选：CLASSIFIER_BASE_URL: 留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
-- 可选：CLASSIFIER_MODEL: gemini-2.0-flash / gpt-4o-mini 等
-- 可选：CLASSIFIER_TOKEN: 对 gemini/openai_compat 模式生效
+Secrets（机密）
+- REPO_B_TOKEN: 细粒度 PAT（仅 contents: write）指向库 B
+- GEMINI_API_KEY: Google Gemini API 密钥（仅当 CLASSIFIER_KIND=gemini 且未提供 CLASSIFIER_TOKEN 时作为回退）
+- LANGSMITH_API_KEY: LangSmith API 密钥（仅用于 docker-compose 示例）
+- CLASSIFIER_TOKEN: 可选，分类后端 token。优先级 secrets.CLASSIFIER_TOKEN > vars.CLASSIFIER_TOKEN；若留空且 CLASSIFIER_KIND=gemini，则回退使用 GEMINI_API_KEY；openai_compat 不回退
+
+Variables（非机密）
+- GEMINI_MODEL: 默认 gemini-2.5-flash（引擎统一切换）
+- CLASSIFY_WITH_AI: 是否启用 AI 分类（默认 false）
+- CLASSIFIER_KIND: 分类后端类型（默认 gemini，可选 openai_compat/service）
+- CLASSIFIER_BASE_URL: 分类服务 BaseURL（留空时按 KIND 使用官方默认）
+- CLASSIFIER_MODEL: 分类模型名（默认 gemini-2.0-flash）
+- CLASSIFIER_TOKEN: 可选，如不想放 Secret 可使用变量，但生产建议使用 Secret
+
+Token 解析顺序（运行时）：
+1) CLASSIFIER_TOKEN（Secrets/Vars）
+2) KIND=gemini 时回退 GEMINI_API_KEY
+3) 其他情况留空（禁用 AI 分类调用，回退关键词规则）
+
+环境变量注入见工作流中的 Run daily workflow 步骤（括号内为来源类型）：
+- REPO_B: owner/DeepResearch-Archive（Var）
+- DEEPRESEARCH_BASE_URL: http://localhost:8123（Var）
+- TZ: Asia/Shanghai（Var）
+- GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}（Secret；仅 KIND=gemini 且未提供 CLASSIFIER_TOKEN 时作为回退）
+- CLASSIFY_WITH_AI: ${{ vars.CLASSIFY_WITH_AI || 'false' }}（Var）
+- CLASSIFIER_KIND: ${{ vars.CLASSIFIER_KIND || 'gemini' }}（Var）
+- CLASSIFIER_BASE_URL: ${{ vars.CLASSIFIER_BASE_URL || '' }}（Var）
+- CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.0-flash' }}（Var）
+- CLASSIFIER_TOKEN: ${{ secrets.CLASSIFIER_TOKEN || vars.CLASSIFIER_TOKEN || '' }}（Secret 优先，其次 Var）
 
 ---
 
@@ -143,19 +160,19 @@ DRY_RUN=1 python Flow/main_workflow.py
 ## 配置项
 
 - 必填
-  - REPO_B: 目标仓库坐标，如 owner/DeepResearch-Archive
-  - DEEPRESEARCH_BASE_URL: DeepResearch 引擎基址，CI 内为 http://localhost:8123
-  - TZ: Asia/Shanghai
+  - REPO_B [Var]: 目标仓库坐标，如 owner/DeepResearch-Archive
+  - DEEPRESEARCH_BASE_URL [Var]: DeepResearch 引擎基址，CI 内为 http://localhost:8123
+  - TZ [Var]: Asia/Shanghai
 - 可选
-  - REPO_B_TOKEN: 推送库 B 的 PAT（本地 dry-run 可不填）
-  - CATEGORY_LIST: 逗号分隔分类集合（顺序影响导航展示顺序）
-  - CLASSIFY_WITH_AI: 是否启用 AI 分类（true/false，默认 false）
-  - CLASSIFIER_KIND: 分类后端类型（gemini | openai_compat | service）
-  - CLASSIFIER_BASE_URL: 分类服务 BaseURL；留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
-  - CLASSIFIER_MODEL: 分类模型名（gemini 默认 gemini-2.0-flash；openai_compat 示例 gpt-4o-mini）
-  - CLASSIFIER_TOKEN: 分类后端鉴权 token（适用于 gemini/openai_compat）
-  - URL_WHITELIST: 逗号分隔的域名白名单（预留内容安全过滤）
-  - MAX_CONCURRENT_TOPICS, HTTP_MAX_RETRIES, HTTP_BACKOFF_SECONDS, MAX_REPORTS_PER_RUN 等运行参数
+  - REPO_B_TOKEN [Secret]: 推送库 B 的 PAT（本地 dry-run 可不填）
+  - CATEGORY_LIST [Var]: 逗号分隔分类集合（顺序影响导航展示顺序）
+  - CLASSIFY_WITH_AI [Var]: 是否启用 AI 分类（true/false，默认 false）
+  - CLASSIFIER_KIND [Var]: 分类后端类型（gemini | openai_compat | service）
+  - CLASSIFIER_BASE_URL [Var]: 分类服务 BaseURL；留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
+  - CLASSIFIER_MODEL [Var]: 分类模型名（gemini 默认 gemini-2.0-flash；openai_compat 示例 gpt-4o-mini）
+  - CLASSIFIER_TOKEN [Secret/Var]: 优先 secrets.CLASSIFIER_TOKEN → vars.CLASSIFIER_TOKEN；若留空且 KIND=gemini，则回退 GEMINI_API_KEY；openai_compat 不回退
+  - URL_WHITELIST [Var]: 逗号分隔的域名白名单（预留内容安全过滤）
+  - MAX_CONCURRENT_TOPICS, HTTP_MAX_RETRIES, HTTP_BACKOFF_SECONDS, MAX_REPORTS_PER_RUN [Var] 等运行参数
 
 配置解析与校验逻辑见: [Flow/src/config.py](Flow/src/config.py)
 
