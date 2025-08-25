@@ -30,6 +30,7 @@ services:
   langgraph-api:
     image: gemini-fullstack-langgraph
     container_name: langgraph-api
+    restart: unless-stopped
     ports:
       - "8123:8000"
     depends_on:
@@ -42,3 +43,4 @@ services:
       LANGSMITH_API_KEY: ${LANGSMITH_API_KEY}
       REDIS_URI: redis://langgraph-redis:6379
       POSTGRES_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable
+      GOOGLE_API_KEY: ${GEMINI_API_KEY}

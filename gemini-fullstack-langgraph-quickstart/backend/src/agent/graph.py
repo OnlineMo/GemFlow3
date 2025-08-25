@@ -33,11 +33,11 @@ from agent.utils import (
 
 load_dotenv()
 
-if os.getenv("GEMINI_API_KEY") is None:
-    raise ValueError("GEMINI_API_KEY is not set")
+def _get_gemini_api_key() -> str:
+    key = os.getenv("GEMINI_API_KEY", "").strip()
+    return key
 
-# Used for Google Search API
-genai_client = Client(api_key=os.getenv("GEMINI_API_KEY"))
+# Note: Defer external client creation to runtime inside nodes to avoid import-time failures
 
 
 # Nodes
@@ -65,7 +65,7 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         model=configurable.query_generator_model,
         temperature=1.0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
+        api_key=_get_gemini_api_key(),
     )
     structured_llm = llm.with_structured_output(SearchQueryList)
 
@@ -112,7 +112,9 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     )
 
     # Uses the google genai client as the langchain client doesn't return grounding metadata
-    response = genai_client.models.generate_content(
+    api_key = _get_gemini_api_key()
+    client = Client(api_key=api_key)
+    response = client.models.generate_content(
         model=configurable.query_generator_model,
         contents=formatted_prompt,
         config={
@@ -167,7 +169,7 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         model=reasoning_model,
         temperature=1.0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
+        api_key=_get_gemini_api_key(),
     )
     result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
 
@@ -246,7 +248,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         model=reasoning_model,
         temperature=0,
         max_retries=2,
-        api_key=os.getenv("GEMINI_API_KEY"),
+        api_key=_get_gemini_api_key(),
     )
     result = llm.invoke(formatted_prompt)
 

@@ -2,6 +2,7 @@
 import pathlib
 from fastapi import FastAPI, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.applications import Starlette
 
 # Define the FastAPI app
 app = FastAPI()
@@ -22,7 +23,7 @@ def create_frontend_router(build_dir="../frontend/dist"):
         print(
             f"WARN: Frontend build directory not found or incomplete at {build_path}. Serving frontend will likely fail."
         )
-        # Return a dummy router if build isn't ready
+        # Return a minimal ASGI app if build isn't ready
         from starlette.routing import Route
 
         async def dummy_frontend(request):
@@ -32,7 +33,7 @@ def create_frontend_router(build_dir="../frontend/dist"):
                 status_code=503,
             )
 
-        return Route("/{path:path}", endpoint=dummy_frontend)
+        return Starlette(routes=[Route("/{path:path}", endpoint=dummy_frontend)])
 
     return StaticFiles(directory=build_path, html=True)
 

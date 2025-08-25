@@ -57,7 +57,7 @@ jobs:
         run: |
           set -e
           echo "Waiting for engine http://localhost:8123 ..."
-          for i in $(seq 1 40); do
+          for i in $(seq 1 80); do
             if curl -fsS http://localhost:8123/openapi.json >/dev/null 2>&1; then
               echo "Engine is ready"
               exit 0
@@ -66,7 +66,14 @@ jobs:
             sleep 3
           done
           echo "Engine failed to become ready" >&2
+          echo "=== docker ps -a ==="
           docker ps -a || true
+          echo "=== langgraph-api logs (last 200 lines) ==="
+          docker logs --tail 200 langgraph-api || true
+          echo "=== langgraph-postgres logs (last 200 lines) ==="
+          docker logs --tail 200 langgraph-postgres || true
+          echo "=== langgraph-redis logs (last 200 lines) ==="
+          docker logs --tail 200 langgraph-redis || true
           exit 1
 
       - name: Configure git user
