@@ -9,14 +9,40 @@ from dotenv import load_dotenv
 # 加载 .env（若存在）
 load_dotenv(override=True)
 
-DEFAULT_CATEGORIES = ["AI", "安全", "开源", "芯片", "云与大数据", "其他"]
+DEFAULT_CATEGORIES = [
+    "人工智能和机器学习",
+    "大型语言模型",
+    "软件开发与工程",
+    "网络安全",
+    "云和 DevOps",
+    "数据和数据库",
+    "网络和移动",
+    "消费电子和硬件",
+    "游戏与互动",
+    "区块链与加密",
+    "科学与太空",
+    "医疗保健与生物技术",
+    "能源与气候",
+    "经济与市场",
+    "政策与法规",
+    "行业与公司",
+    "文化与媒体",
+    "未分类",
+]
 
 
 class AppSettings(BaseModel):
     repo_b: str
-    api_base_url: str
+    deepresearch_base_url: str  # DeepResearch 引擎 BaseURL（必填）
     tz: str = "Asia/Shanghai"
     repo_b_token: Optional[str] = None
+
+    # AI 分类配置
+    classify_with_ai: bool = False
+    classifier_kind: str = "gemini"  # gemini | openai_compat | service
+    classifier_base_url: Optional[str] = None  # gemini 默认 https://generativelanguage.googleapis.com；openai_compat 需提供 OpenAI 兼容 BaseURL；service 为自建 /classify
+    classifier_model: Optional[str] = "gemini-2.0-flash"
+    classifier_token: Optional[str] = None  # 用于 gemini/openai_compat
 
     # 分类集合
     category_list: List[str] = Field(default_factory=lambda: DEFAULT_CATEGORIES.copy())
@@ -54,7 +80,7 @@ class AppSettings(BaseModel):
             return [str(x).strip().lower() for x in v]
         raise TypeError("URL_WHITELIST must be a comma separated string or list")
 
-    @field_validator("api_base_url", mode="before")
+    @field_validator("deepresearch_base_url", "classifier_base_url", mode="before")
     @classmethod
     def normalize_base_url(cls, v):
         if isinstance(v, str):
@@ -70,13 +96,21 @@ def _getenv(name: str, default: Optional[str] = None) -> Optional[str]:
 def _build_settings() -> AppSettings:
     data = {
         "repo_b": _getenv("REPO_B"),
-        "api_base_url": _getenv("API_BASE_URL"),
+        "deepresearch_base_url": _getenv("DEEPRESEARCH_BASE_URL"),
         "tz": _getenv("TZ", "Asia/Shanghai"),
         "repo_b_token": _getenv("REPO_B_TOKEN"),
 
         "category_list": _getenv("CATEGORY_LIST"),
         "url_whitelist": _getenv("URL_WHITELIST"),
 
+        # AI 分类配置
+        "classify_with_ai": (_getenv("CLASSIFY_WITH_AI", "false") or "false").lower() in {"1", "true", "yes", "on"},
+        "classifier_kind": (_getenv("CLASSIFIER_KIND", "gemini") or "gemini").strip().lower(),
+        "classifier_base_url": _getenv("CLASSIFIER_BASE_URL"),
+        "classifier_model": _getenv("CLASSIFIER_MODEL", "gemini-2.0-flash"),
+        "classifier_token": _getenv("CLASSIFIER_TOKEN"),
+
+        # 运行期参数
         "max_concurrent_topics": int(_getenv("MAX_CONCURRENT_TOPICS", "3")),
         "http_max_retries": int(_getenv("HTTP_MAX_RETRIES", "3")),
         "http_backoff_seconds": float(_getenv("HTTP_BACKOFF_SECONDS", "3")),
@@ -91,8 +125,8 @@ def _assert_required(settings: AppSettings) -> None:
     missing = []
     if not settings.repo_b:
         missing.append("REPO_B")
-    if not settings.api_base_url:
-        missing.append("API_BASE_URL")
+    if not settings.deepresearch_base_url:
+        missing.append("DEEPRESEARCH_BASE_URL")
     if not settings.tz:
         missing.append("TZ")
     if missing:

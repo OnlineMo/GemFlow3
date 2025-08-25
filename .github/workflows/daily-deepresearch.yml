@@ -15,6 +15,13 @@ concurrency:
 jobs:
   generate_report:
     runs-on: ubuntu-latest
+    env:
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      CLASSIFY_WITH_AI: ${{ vars.CLASSIFY_WITH_AI || 'false' }}
+      CLASSIFIER_KIND: ${{ vars.CLASSIFIER_KIND || 'gemini' }}
+      CLASSIFIER_BASE_URL: ${{ vars.CLASSIFIER_BASE_URL || '' }}
+      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.5-flash-lite' }}
+      CLASSIFIER_TOKEN: ${{ secrets.CLASSIFIER_TOKEN || vars.CLASSIFIER_TOKEN || '' }}
 
     steps:
       - name: Checkout
@@ -50,7 +57,7 @@ jobs:
         env:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
-          GEMINI_MODEL: gemini-2.5-flash
+          GEMINI_MODEL: ${{ env.GEMINI_MODEL }}
         run: |
           docker compose up -d
 
@@ -86,8 +93,13 @@ jobs:
         env:
           REPO_B_TOKEN: ${{ secrets.REPO_B_TOKEN }}
           REPO_B: owner/DeepResearch-Archive
-          API_BASE_URL: http://localhost:8123
+          DEEPRESEARCH_BASE_URL: http://localhost:8123
           TZ: Asia/Shanghai
+          CLASSIFY_WITH_AI: ${{ env.CLASSIFY_WITH_AI }}
+          CLASSIFIER_KIND: ${{ env.CLASSIFIER_KIND }}
+          CLASSIFIER_BASE_URL: ${{ env.CLASSIFIER_BASE_URL }}
+          CLASSIFIER_MODEL: ${{ env.CLASSIFIER_MODEL }}
+          CLASSIFIER_TOKEN: ${{ env.CLASSIFIER_TOKEN }}
         run: |
           python Flow/main_workflow.py
 

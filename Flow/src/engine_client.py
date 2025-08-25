@@ -24,7 +24,8 @@ class DeepResearchClient:
 
     def __init__(self, base_url: Optional[str] = None, timeout: int = 120) -> None:
         settings = get_settings()
-        self.base_url = (base_url or settings.api_base_url).rstrip("/")
+        # DeepResearch 引擎 BaseURL 优先，兼容旧的 API_BASE_URL
+        self.base_url = (base_url or settings.deepresearch_base_url).rstrip("/")
         self.timeout = timeout
         self._session = requests.Session()
 

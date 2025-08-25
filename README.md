@@ -80,12 +80,20 @@ flowchart TD
 pip install -r Flow/requirements.txt
 ```
 
-2) 配置环境  
+2) 配置环境
 复制 [Flow/.env.example](Flow/.env.example) 为 .env 并按需修改。例如:
 ```
 REPO_B=owner/DeepResearch-Archive
-API_BASE_URL=http://localhost:8123
+DEEPRESEARCH_BASE_URL=http://localhost:8123
 TZ=Asia/Shanghai
+
+# 可选：开启 AI 分类
+# CLASSIFY_WITH_AI=false
+# CLASSIFIER_KIND=gemini         # gemini | openai_compat | service
+# CLASSIFIER_BASE_URL=           # 留空使用默认：gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1
+# CLASSIFIER_MODEL=gemini-2.0-flash  # openai_compat 示例：gpt-4o-mini
+# CLASSIFIER_TOKEN=              # 对 gemini/openai_compat 生效
+
 # 本地 dry-run 可不设置 REPO_B_TOKEN
 ```
 
@@ -94,7 +102,7 @@ TZ=Asia/Shanghai
 DRY_RUN=1 python Flow/main_workflow.py
 ```
 
-说明: dry-run 会调用引擎生成 Markdown（若 API_BASE_URL 可用），但不推送到库 B。
+说明: dry-run 会调用引擎生成 Markdown（若 DEEPRESEARCH_BASE_URL 可用），但不推送到库 B。
 
 ### 方式 B：CI 内部全自动（推荐）
 
@@ -110,8 +118,13 @@ DRY_RUN=1 python Flow/main_workflow.py
 
 环境变量注入见工作流中的 Run daily workflow 步骤：
 - REPO_B: owner/DeepResearch-Archive（如需修改库 B，请同步更新）
-- API_BASE_URL: http://localhost:8123
+- DEEPRESEARCH_BASE_URL: http://localhost:8123
 - TZ: Asia/Shanghai
+- 可选：CLASSIFY_WITH_AI: false
+- 可选：CLASSIFIER_KIND: gemini | openai_compat | service
+- 可选：CLASSIFIER_BASE_URL: 留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
+- 可选：CLASSIFIER_MODEL: gemini-2.0-flash / gpt-4o-mini 等
+- 可选：CLASSIFIER_TOKEN: 对 gemini/openai_compat 模式生效
 
 ---
 
@@ -122,8 +135,8 @@ DRY_RUN=1 python Flow/main_workflow.py
 - AI_Reports/<分类slug>/<slugified_主题>-<yyyy-mm-dd>--vN.md
 - 可选: history.json（元数据索引）
 
-分类集合默认: AI, 安全, 开源, 芯片, 云与大数据, 其他  
-可通过环境变量 CATEGORY_LIST 配置；显示名与 slug 分离，slug 化仅用于目录安全。
+分类集合默认: 人工智能和机器学习, 大型语言模型, 软件开发与工程, 网络安全, 云和 DevOps, 数据和数据库, 网络和移动, 消费电子和硬件, 游戏与互动, 区块链与加密, 科学与太空, 医疗保健与生物技术, 能源与气候, 经济与市场, 政策与法规, 行业与公司, 文化与媒体, 未分类
+可通过环境变量 CATEGORY_LIST 配置；顺序将决定导航展示顺序；显示名与 slug 分离，slug 化仅用于目录安全。
 
 ---
 
@@ -131,11 +144,16 @@ DRY_RUN=1 python Flow/main_workflow.py
 
 - 必填
   - REPO_B: 目标仓库坐标，如 owner/DeepResearch-Archive
-  - API_BASE_URL: DeepResearch 引擎基址，CI 内为 http://localhost:8123
+  - DEEPRESEARCH_BASE_URL: DeepResearch 引擎基址，CI 内为 http://localhost:8123
   - TZ: Asia/Shanghai
 - 可选
   - REPO_B_TOKEN: 推送库 B 的 PAT（本地 dry-run 可不填）
-  - CATEGORY_LIST: 逗号分隔分类集合
+  - CATEGORY_LIST: 逗号分隔分类集合（顺序影响导航展示顺序）
+  - CLASSIFY_WITH_AI: 是否启用 AI 分类（true/false，默认 false）
+  - CLASSIFIER_KIND: 分类后端类型（gemini | openai_compat | service）
+  - CLASSIFIER_BASE_URL: 分类服务 BaseURL；留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
+  - CLASSIFIER_MODEL: 分类模型名（gemini 默认 gemini-2.0-flash；openai_compat 示例 gpt-4o-mini）
+  - CLASSIFIER_TOKEN: 分类后端鉴权 token（适用于 gemini/openai_compat）
   - URL_WHITELIST: 逗号分隔的域名白名单（预留内容安全过滤）
   - MAX_CONCURRENT_TOPICS, HTTP_MAX_RETRIES, HTTP_BACKOFF_SECONDS, MAX_REPORTS_PER_RUN 等运行参数
 
@@ -160,6 +178,35 @@ DRY_RUN=1 python Flow/main_workflow.py
 - 图定义: [gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py](gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py)
 - Docker 打包后在 CI 中通过 docker-compose 暴露 8123 端口供库 A 调用
 - 库 A 调用入口: [Flow/src/engine_client.py](Flow/src/engine_client.py) → /graphs/agent/invoke
+
+### AI 分类服务（可选）
+
+- 模式选择：通过 CLASSIFIER_KIND 指定
+  - gemini：直接调用 Google Generative Language API
+    - 默认基址：https://generativelanguage.googleapis.com
+    - 需提供 CLASSIFIER_TOKEN（或 GEMINI_API_KEY），CLASSIFIER_MODEL（默认 gemini-2.0-flash）
+  - openai_compat：调用 OpenAI 兼容格式
+    - 默认基址：https://api.openai.com/v1
+    - 需提供 CLASSIFIER_TOKEN（或 OPENAI_API_KEY），CLASSIFIER_MODEL（示例 gpt-4o-mini）
+  - service：自建分类服务
+    - 需提供 CLASSIFIER_BASE_URL，并实现 POST {base}/classify
+- 接口契约（service 模式）
+  - 请求体：
+    ```
+    {
+      "text": "待分类主题文本",
+      "candidates": ["人工智能和机器学习", "大型语言模型", "..."],
+      "language": "zh-CN"
+    }
+    ```
+  - 返回体：
+    ```
+    {
+      "category": "大型语言模型",
+      "confidence": 0.87
+    }
+    ```
+- 运行时行为：未配置或调用失败时自动回退至关键词规则与“未分类”
 
 ---
 

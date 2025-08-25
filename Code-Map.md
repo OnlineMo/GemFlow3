@@ -260,3 +260,80 @@ jobs:
 - 库 A：全流程编排（抓取 → 生成 → 存储 → 更新导航/README），对外部依赖提供重试与幂等保障
 - 库 B：只负责“可消费的内容与展示”，可随时被重建导航而不丢数据
 - 通过缓存、幂等、增量生成与最小权限原则实现低维护、可恢复与可扩展
+---
+
+## 分类体系（可扩展）
+
+本项目内置一套可扩展的主题分类，用于在库 B 中按类目组织报告与在导航中分组展示。分类顺序由配置的 CATEGORY_LIST 决定，目录名使用显示名的安全 slug（自动生成，跨平台兼容）。
+
+- 目录命名：显示名经 slugify 生成 ASCII 目录名（如“网络安全”→ security 或拼音 slug）
+- 展示命名：导航与 README 用中文显示名
+- 回退策略：无法判定时归入“未分类”
+
+推荐分类清单（slug → 中文显示名）：
+| slug | 中文显示名 | 说明 |
+|---|---|---|
+| ai-ml | 人工智能和机器学习 | 传统 ML、CV、语音、NLP、多模态、AutoML、推理加速等 |
+| llm | 大型语言模型 | LLM、RAG、Agent、对齐/微调、蒸馏、长上下文等 |
+| software-dev | 软件开发与工程 | 架构、设计模式、CI/CD、测试、重构、代码质量、Dev 工具 |
+| security | 网络安全 | 攻防、漏洞、CVE、零信任、WAF、SIEM、合规与风险 |
+| cloud-devops | 云和 DevOps | 云原生、K8s、容器、Service Mesh、SRE、IaC、Serverless |
+| data | 数据和数据库 | 数据湖/仓、OLAP/OLTP、ETL/ELT、治理、血缘、流批处理 |
+| web-mobile | 网络和移动 | 前端、Web、移动端、跨端技术、浏览器、UI/UX |
+| consumer-tech | 消费电子和硬件 | 手机、PC、可穿戴、XR/AR/VR、IoT、边缘设备 |
+| gaming | 游戏与互动 | 引擎、玩法、电竞、发行、商业化 |
+| blockchain | 区块链与加密 | 公链、DeFi、NFT、合约、ZK、L2、钱包 |
+| science | 科学与太空 | 物理、化学、生物、材料、航天与探索 |
+| healthcare | 医疗保健与生物技术 | 医疗、制药、基因、医学影像、临床、EMR |
+| energy-climate | 能源与气候 | 储能、电池、光伏/风电、氢能、核能、碳排与 ESG |
+| economy | 经济与市场 | 宏观、市场、股票/债券、汇率、投融资、IPO |
+| policy | 政策与法规 | 监管、合规、标准、隐私/GDPR、知识产权 |
+| industry | 行业与公司 | 企业动态、财报、战略、并购、生态与竞争 |
+| culture-media | 文化与媒体 | 影视、音乐、出版、短视频、直播、社交与内容生态 |
+| uncategorized | 未分类 | 回退类目（低置信度或新领域待沉淀） |
+
+### 配置方式
+
+- CATEGORY_LIST：逗号分隔的显示名列表，决定分类顺序与可用类目。例如：
+  ```
+  CATEGORY_LIST=人工智能和机器学习,大型语言模型,软件开发与工程,网络安全,云和 DevOps,数据和数据库,网络和移动,消费电子和硬件,游戏与互动,区块链与加密,科学与太空,医疗保健与生物技术,能源与气候,经济与市场,政策与法规,行业与公司,文化与媒体,未分类
+  ```
+- DeepResearch 引擎地址：
+  - DEEPRESEARCH_BASE_URL：Graph/Agent 推理服务根地址（必填）
+- AI 分类（可选）：
+  - CLASSIFY_WITH_AI=true 开启
+  - CLASSIFIER_KIND：gemini | openai_compat | service
+  - CLASSIFIER_BASE_URL：留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1；service 模式需自建 /classify）
+  - CLASSIFIER_MODEL：分类模型名（gemini 默认 gemini-2.0-flash；openai_compat 示例 gpt-4o-mini）
+  - CLASSIFIER_TOKEN：分类后端鉴权 token（适用于 gemini/openai_compat）
+  - 未配置或失败时自动回退到规则匹配与“未分类”
+
+### 行为与实现说明
+
+- 分类逻辑：
+  - 优先调用分类服务（启用后）：将待分类文本与候选类目传入 /classify，返回 category 与 confidence
+  - 失败或未启用时，使用关键词规则与名称包含回退
+  - 最终兜底为“未分类”
+- 目录与显示名：
+  - 存储目录由显示名自动生成 ASCII slug，导航展示使用中文显示名
+  - 调整 CATEGORY_LIST 顺序即可影响导航中类目的排序
+
+### 接口（分类服务）
+
+- POST /classify
+  - 请求体：
+    ```
+    {
+      "text": "待分类主题文本",
+      "candidates": ["人工智能和机器学习", "大型语言模型", "..."],
+      "language": "zh-CN",
+      "extra_instructions": "可选的提示语"
+    }
+    ```
+  - 返回：
+    ```
+    {
+      "category": "大型语言模型",
+      "confidence": 0.87
+    }
+    ```
