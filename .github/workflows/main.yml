@@ -2,7 +2,7 @@ name: Daily DeepResearch
 
 on:
   schedule:
-    - cron: '0 16 * * *'  # 北京时间每日 00:00 运行（UTC+8 → UTC-8 差 16h）
+    - cron: '0 16 * * *'  # 北京时间每日 00:00 运行
   workflow_dispatch:
 
 permissions:
@@ -20,7 +20,7 @@ jobs:
       CLASSIFY_WITH_AI: ${{ vars.CLASSIFY_WITH_AI || 'false' }}
       CLASSIFIER_KIND: ${{ vars.CLASSIFIER_KIND || 'gemini' }}
       CLASSIFIER_BASE_URL: ${{ vars.CLASSIFIER_BASE_URL || '' }}
-      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.5-flash-lite' }}
+      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.0-flash' }}
       CLASSIFIER_TOKEN: ${{ secrets.CLASSIFIER_TOKEN || vars.CLASSIFIER_TOKEN || '' }}
 
     steps:
@@ -95,7 +95,6 @@ jobs:
           REPO_B: ${{ secrets.REPO_B }}
           DEEPRESEARCH_BASE_URL: http://localhost:8123
           TZ: Asia/Shanghai
-          # 为 Flow 进程提供分类所需的 Token 回退来源（仅当 CLASSIFIER_KIND=gemini 才使用）
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           CLASSIFY_WITH_AI: ${{ env.CLASSIFY_WITH_AI }}
           CLASSIFIER_KIND: ${{ env.CLASSIFIER_KIND }}
