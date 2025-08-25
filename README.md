@@ -13,18 +13,18 @@
 ## 目录结构
 
 - 库 A（编排与自动化）
-  - 主流程入口: [scr/main_workflow.py](scr/main_workflow.py)
-  - 依赖清单: [scr/requirements.txt](scr/requirements.txt)
-  - 环境样例: [scr/.env.example](scr/.env.example)
-  - 配置加载: [scr/src/config.py](scr/src/config.py)
-  - 引擎客户端: [scr/src/engine_client.py](scr/src/engine_client.py)
-  - 热榜抓取与缓存: [scr/src/trends.py](scr/src/trends.py)
-  - 主题提取与分类: [scr/src/topics.py](scr/src/topics.py)
-  - 历史与幂等: [scr/src/history.py](scr/src/history.py)
-  - GitHub API 写入: [scr/src/github_api.py](scr/src/github_api.py)
-  - 导航与 README 渲染: [scr/src/renderers.py](scr/src/renderers.py)
-  - 工具函数: [scr/src/utils.py](scr/src/utils.py)
-  - 结构化日志: [scr/src/logger.py](scr/src/logger.py)
+  - 主流程入口: [Flow/main_workflow.py](Flow/main_workflow.py)
+  - 依赖清单: [Flow/requirements.txt](Flow/requirements.txt)
+  - 环境样例: [Flow/.env.example](Flow/.env.example)
+  - 配置加载: [Flow/src/config.py](Flow/src/config.py)
+  - 引擎客户端: [Flow/src/engine_client.py](Flow/src/engine_client.py)
+  - 热榜抓取与缓存: [Flow/src/trends.py](Flow/src/trends.py)
+  - 主题提取与分类: [Flow/src/topics.py](Flow/src/topics.py)
+  - 历史与幂等: [Flow/src/history.py](Flow/src/history.py)
+  - GitHub API 写入: [Flow/src/github_api.py](Flow/src/github_api.py)
+  - 导航与 README 渲染: [Flow/src/renderers.py](Flow/src/renderers.py)
+  - 工具函数: [Flow/src/utils.py](Flow/src/utils.py)
+  - 结构化日志: [Flow/src/logger.py](Flow/src/logger.py)
 - 引擎（LangGraph + Gemini）
   - 总览与使用: [gemini-fullstack-langgraph-quickstart/README.md](gemini-fullstack-langgraph-quickstart/README.md)
   - 后端图定义: [gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py](gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py)
@@ -77,11 +77,11 @@ flowchart TD
 
 1) 安装依赖
 ```bash
-pip install -r scr/requirements.txt
+pip install -r Flow/requirements.txt
 ```
 
 2) 配置环境  
-复制 [scr/.env.example](scr/.env.example) 为 .env 并按需修改。例如:
+复制 [Flow/.env.example](Flow/.env.example) 为 .env 并按需修改。例如:
 ```
 REPO_B=owner/DeepResearch-Archive
 API_BASE_URL=http://localhost:8123
@@ -91,7 +91,7 @@ TZ=Asia/Shanghai
 
 3) 运行（dry-run）
 ```bash
-DRY_RUN=1 python scr/main_workflow.py
+DRY_RUN=1 python Flow/main_workflow.py
 ```
 
 说明: dry-run 会调用引擎生成 Markdown（若 API_BASE_URL 可用），但不推送到库 B。
@@ -101,7 +101,7 @@ DRY_RUN=1 python scr/main_workflow.py
 本仓库已提供每日定时工作流: [.github/workflows/daily-deepresearch.yml](.github/workflows/daily-deepresearch.yml)
 
 - 触发: 北京时间每日 00:00
-- 步骤: 构建镜像 → docker-compose 启动 LangGraph API → 探活 http://localhost:8123/openapi.json → 执行 [scr/main_workflow.py](scr/main_workflow.py) → 更新库 B → 清理
+- 步骤: 构建镜像 → docker-compose 启动 LangGraph API → 探活 http://localhost:8123/openapi.json → 执行 [Flow/main_workflow.py](Flow/main_workflow.py) → 更新库 B → 清理
 
 在 GitHub 仓库 gemflow3 的 Settings → Secrets and variables → Actions 中配置以下 Secrets:
 - REPO_B_TOKEN: 细粒度 PAT（仅 contents: write）指向库 B
@@ -139,7 +139,7 @@ DRY_RUN=1 python scr/main_workflow.py
   - URL_WHITELIST: 逗号分隔的域名白名单（预留内容安全过滤）
   - MAX_CONCURRENT_TOPICS, HTTP_MAX_RETRIES, HTTP_BACKOFF_SECONDS, MAX_REPORTS_PER_RUN 等运行参数
 
-配置解析与校验逻辑见: [scr/src/config.py](scr/src/config.py)
+配置解析与校验逻辑见: [Flow/src/config.py](Flow/src/config.py)
 
 ---
 
@@ -148,9 +148,9 @@ DRY_RUN=1 python scr/main_workflow.py
 - 指纹: SHA-256(主题归一 + 日期 + 版次)；重复跳过
 - 版次: 同日同主题占用 vN，冲突自动递增
 - 导航与首页: 扫描文件系统构建索引 → 纯函数渲染 → 空 diff 不提交
-- 重试: HTTP 指数退避，详见 [scr/src/engine_client.py](scr/src/engine_client.py)
-- 历史记录: [scr/src/history.py](scr/src/history.py) 写入 scr/state/history.json
-- 结构化日志: [scr/src/logger.py](scr/src/logger.py) 输出到 scr/state/logs/YYYY-MM-DD.jsonl
+- 重试: HTTP 指数退避，详见 [Flow/src/engine_client.py](Flow/src/engine_client.py)
+- 历史记录: [Flow/src/history.py](Flow/src/history.py) 写入 Flow/state/history.json
+- 结构化日志: [Flow/src/logger.py](Flow/src/logger.py) 输出到 Flow/state/logs/YYYY-MM-DD.jsonl
 
 ---
 
@@ -159,7 +159,7 @@ DRY_RUN=1 python scr/main_workflow.py
 - 引擎仓库: [gemini-fullstack-langgraph-quickstart/README.md](gemini-fullstack-langgraph-quickstart/README.md)
 - 图定义: [gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py](gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py)
 - Docker 打包后在 CI 中通过 docker-compose 暴露 8123 端口供库 A 调用
-- 库 A 调用入口: [scr/src/engine_client.py](scr/src/engine_client.py) → /graphs/agent/invoke
+- 库 A 调用入口: [Flow/src/engine_client.py](Flow/src/engine_client.py) → /graphs/agent/invoke
 
 ---
 
@@ -197,11 +197,11 @@ git push -u origin main
 - 引擎未就绪
   - CI 会探测 http://localhost:8123/openapi.json；失败时输出 docker 日志
 - 无新增报告
-  - 可能当日热榜为空或候选提取无有效主题（可查看日志 scr/state/logs/*.jsonl）
+  - 可能当日热榜为空或候选提取无有效主题（可查看日志 Flow/state/logs/*.jsonl）
 - 推送失败
   - 确认 REPO_B_TOKEN 权限仅限 contents: write 且作用于库 B
 - 模板不匹配
-  - 引擎会遵循 Markdown 模板提示；如需更强约束，可在 [scr/src/engine_client.py](scr/src/engine_client.py) 中调整提示词
+  - 引擎会遵循 Markdown 模板提示；如需更强约束，可在 [Flow/src/engine_client.py](Flow/src/engine_client.py) 中调整提示词
 
 ---
 

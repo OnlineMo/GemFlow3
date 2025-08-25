@@ -31,14 +31,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.cache/pip
-          key: pip-${{ runner.os }}-${{ hashFiles('scr/requirements.txt') }}
+          key: pip-${{ runner.os }}-${{ hashFiles('Flow/requirements.txt') }}
           restore-keys: |
             pip-${{ runner.os }}-
 
-      - name: Install scr dependencies
+      - name: Install Flow dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r scr/requirements.txt
+          pip install -r Flow/requirements.txt
 
       - name: Build LangGraph API image
         working-directory: gemini-fullstack-langgraph-quickstart
@@ -81,7 +81,7 @@ jobs:
           API_BASE_URL: http://localhost:8123
           TZ: Asia/Shanghai
         run: |
-          python scr/main_workflow.py
+          python Flow/main_workflow.py
 
       - name: Show docker logs on failure
         if: failure()

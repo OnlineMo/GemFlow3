@@ -11,7 +11,7 @@ from .config import get_settings
 
 LOG = get_logger(__name__)
 
-HISTORY_PATH = Path("scr") / "state" / "history.json"
+HISTORY_PATH = Path("Flow") / "state" / "history.json"
 
 
 @dataclass(frozen=True)

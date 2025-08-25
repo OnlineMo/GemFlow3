@@ -83,12 +83,12 @@ def get_run_id() -> str:
 
 
 def get_logger(
-    name: str = "scr",
+    name: str = "Flow",
     tz: str = "Asia/Shanghai",
-    log_dir: str = os.path.join("scr", "state", "logs"),
+    log_dir: str = os.path.join("Flow", "state", "logs"),
 ) -> logging.Logger:
     """
-    获取带 JSONL 输出的 logger, 同时写入 stdout 与文件 scr/state/logs/YYYY-MM-DD.jsonl
+    获取带 JSONL 输出的 logger, 同时写入 stdout 与文件 Flow/state/logs/YYYY-MM-DD.jsonl
     幂等初始化: 重复调用不会重复添加 handler
     """
     logger = logging.getLogger(name)

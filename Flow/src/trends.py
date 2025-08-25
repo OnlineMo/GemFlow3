@@ -15,7 +15,7 @@ from .config import get_settings
 LOG = get_logger(__name__)
 
 
-CACHE_DIR = Path("scr") / "daily_trends"
+CACHE_DIR = Path("Flow") / "daily_trends"
 
 
 def _cache_path(date_str: str) -> Path:

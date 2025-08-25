@@ -12,13 +12,13 @@ venv/
 .env.*
 
 # Repo A runtime artifacts
-scr/state/
-scr/daily_trends/
+Flow/state/
+Flow/daily_trends/
 
 # Logs
 *.log
 logs/
-scr/state/logs/
+Flow/state/logs/
 
 # OS files
 .DS_Store
