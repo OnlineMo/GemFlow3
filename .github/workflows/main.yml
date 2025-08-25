@@ -2,7 +2,7 @@ name: Daily DeepResearch
 
 on:
   schedule:
-    - cron: '0 16 * * *'  # 北京时间每日 00:00 运行
+    - cron: '0 0 * * *'  # 北京时间每日 08:00 运行
   workflow_dispatch:
 
 permissions:
