@@ -51,7 +51,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
         run: |
-          docker-compose up -d
+          docker compose up -d
 
       - name: Wait for engine readiness
         run: |
@@ -95,4 +95,4 @@ jobs:
         if: always()
         working-directory: gemini-fullstack-langgraph-quickstart
         run: |
-          docker-compose down -v || true
+          docker compose down -v || true
