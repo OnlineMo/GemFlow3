@@ -4,7 +4,7 @@
 
 - 编排侧 Library A: Python 工作流，负责抓取→候选生成→分类→调用引擎→落DeepResearch-Archive→更新导航与首页→幂等记录
 - 引擎侧: 使用 Google Gemini + LangGraph 的研究代理，通过 web 搜索与反思迭代完成深入研究并产出可引用的回答
-- 运行形态: GitHub Actions 内部基于 docker-compose 拉起引擎 http://localhost:8123，然后执行GemFlow3 主流程
+- 运行形态: GitHub Actions 内部基于 docker-compose 拉起引擎 http://localhost:8123 ，然后执行GemFlow3 主流程
 
 相关背景文档可见 [Code-Map.md](Code-Map.md)。
 
