@@ -22,7 +22,7 @@ class DeepResearchClient:
     目标后端: /graphs/agent/invoke
     """
 
-    def __init__(self, base_url: Optional[str] = None, timeout: int = 120) -> None:
+    def __init__(self, base_url: Optional[str] = None, timeout: int = 300) -> None:
         settings = get_settings()
         # DeepResearch 引擎 BaseURL 优先，兼容旧的 API_BASE_URL
         self.base_url = (base_url or settings.deepresearch_base_url).rstrip("/")

@@ -226,7 +226,7 @@ def _invoke_classifier_service(base: str, topic: str, candidates: List[str]) -> 
     """
     url = f"{base}/classify"
     payload: Dict[str, Any] = {"text": topic, "candidates": candidates, "language": "zh-CN"}
-    resp = requests.post(url, json=payload, timeout=15)
+    resp = requests.post(url, json=payload, timeout=300)
     resp.raise_for_status()
     data = resp.json() or {}
     category = (data.get("category") or "").strip()
@@ -261,7 +261,7 @@ def _invoke_classifier_gemini(base: str, model: str, token: str, topic: str, can
         "generationConfig": {"temperature": 0},
     }
     headers = {"Content-Type": "application/json"}
-    resp = requests.post(url, headers=headers, json=payload, timeout=20)
+    resp = requests.post(url, headers=headers, json=payload, timeout=300)
     resp.raise_for_status()
     data = resp.json() or {}
     text = ""
@@ -317,7 +317,7 @@ def _invoke_classifier_openai_compat(base: str, model: str, token: str, topic: s
         ],
         "temperature": 0,
     }
-    resp = requests.post(url, headers=headers, json=payload, timeout=20)
+    resp = requests.post(url, headers=headers, json=payload, timeout=300)
     resp.raise_for_status()
     data = resp.json() or {}
     text = ""
