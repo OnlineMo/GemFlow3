@@ -195,7 +195,7 @@ def main() -> int:
         "workflow_done",
         extra={"ok": ok_cnt, "failed": fail_cnt, "skipped": skipped_cnt, "run_id": run_id},
     )
-    return 0 if fail_cnt == 0 else 1
+    return 0 if (ok_cnt > 0 or fail_cnt == 0) else 1
 
 
 if __name__ == "__main__":

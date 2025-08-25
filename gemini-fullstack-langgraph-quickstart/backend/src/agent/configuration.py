@@ -48,7 +48,7 @@ class Configuration(BaseModel):
             config["configurable"] if config and "configurable" in config else {}
         )
 
-        # Get raw values from environment or config
+        # Get raw values from environment or config (env takes precedence)
         raw_values: dict[str, Any] = {
             name: os.environ.get(name.upper(), configurable.get(name))
             for name in cls.model_fields.keys()
@@ -56,5 +56,13 @@ class Configuration(BaseModel):
 
         # Filter out None values
         values = {k: v for k, v in raw_values.items() if v is not None}
+
+        # Optional: single env knob to override all model choices
+        # e.g. GEMINI_MODEL=gemini-2.5-flash
+        gem_model = os.environ.get("GEMINI_MODEL")
+        if gem_model:
+            values.setdefault("query_generator_model", gem_model)
+            values.setdefault("reflection_model", gem_model)
+            values.setdefault("answer_model", gem_model)
 
         return cls(**values)

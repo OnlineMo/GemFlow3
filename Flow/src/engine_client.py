@@ -33,8 +33,8 @@ class DeepResearchClient:
 
     @retry(
         reraise=True,
-        stop=stop_after_attempt(lambda: get_settings().http_max_retries),
-        wait=wait_exponential(multiplier=lambda: float(get_settings().http_backoff_seconds)),
+        stop=stop_after_attempt(get_settings().http_max_retries),
+        wait=wait_exponential(multiplier=float(get_settings().http_backoff_seconds)),
         retry=retry_if_exception_type(requests.RequestException),
     )
     def _post(self, url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
