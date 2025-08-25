@@ -1,0 +1,17 @@
+# Core HTTP
+requests==2.32.3
+
+# Env and settings
+python-dotenv==1.0.1
+pydantic==2.8.2
+
+# Retry and resilience
+tenacity==8.5.0
+
+# Templating and markdown rendering
+Jinja2==3.1.4
+
+# Utilities
+python-slugify==8.0.4
+orjson==3.10.7
+tzdata==2024.1
