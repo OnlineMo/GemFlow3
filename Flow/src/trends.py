@@ -7,6 +7,8 @@ from typing import Any, Dict, List, Optional
 
 import orjson
 import requests
+import re
+import json
 
 from .utils import ensure_dir, read_json, write_json, today_str
 from .logger import get_logger
@@ -30,6 +32,71 @@ def _is_fresh(path: Path, ttl_hours: int = 24) -> bool:
         return datetime.now() - mtime < timedelta(hours=ttl_hours)
     except Exception:
         return False
+
+
+def _fetch_baidu_realtime(limit: int = 20) -> List[Dict[str, Any]]:
+    """
+    抓取百度热榜（实时），解析页面中的 <!-- s-data: ... --> JSON。
+    返回结构: [{"title": "...", "url": "..."}]
+    """
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                          "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        }
+        r = requests.get("https://top.baidu.com/board?tab=realtime", timeout=8, headers=headers)
+        r.raise_for_status()
+        html = r.text
+    except Exception as e:
+        LOG.error("baidu_fetch_error", extra={"error": repr(e)})
+        return []
+
+    try:
+        # 直接匹配含注释的 JSON 段
+        m = re.search(r"<!--\s*s-data:(.*?)-->", html, re.DOTALL | re.IGNORECASE)
+        if not m:
+            # 退化尝试：压缩空白后再匹配（仿 PHP 方案）
+            compact = html.replace("\n", "").replace("\r", "").replace(" ", "")
+            m = re.search(r"<!--s-data:(.*?)-->", compact, re.DOTALL | re.IGNORECASE)
+        if not m:
+            LOG.error("baidu_sdata_not_found", extra={})
+            return []
+        raw_json = m.group(1)
+        obj = json.loads(raw_json)
+    except Exception as e:
+        LOG.error("baidu_sdata_parse_error", extra={"error": repr(e)})
+        return []
+
+    items: List[Dict[str, Any]] = []
+    try:
+        cards = obj.get("data", {}).get("cards", []) if isinstance(obj, dict) else []
+        for card in cards:
+            content = card.get("content", []) if isinstance(card, dict) else []
+            for entry in content:
+                title = (entry.get("word") or "").strip()
+                url = entry.get("url") or entry.get("appUrl") or ""
+                if title:
+                    items.append({"title": title, "url": url})
+                if len(items) >= limit:
+                    break
+            if len(items) >= limit:
+                break
+    except Exception:
+        pass
+
+    # 去重
+    seen = set()
+    uniq: List[Dict[str, Any]] = []
+    for it in items:
+        key = (it.get("title") or "").lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        uniq.append(it)
+
+    LOG.info("baidu_realtime_fetched", extra={"items": len(uniq)})
+    return uniq
 
 
 def _fetch_hn_top(limit: int = 20) -> List[Dict[str, Any]]:
@@ -66,21 +133,31 @@ def _fetch_hn_top(limit: int = 20) -> List[Dict[str, Any]]:
 
 def fetch_trends_from_google(date_str: str) -> List[Dict[str, Any]]:
     """
-    聚合获取热点（无密钥），当前实现：Hacker News Top Stories。
-    可扩展为 GitHub Trending / Google News RSS 等多源。
+    聚合获取热点（无密钥）：
+    1) 首选 百度热榜（实时）
+    2) 回退 Hacker News Top Stories
+    3) 最终兜底一个通用主题，避免空跑
     """
     LOG.info("fetch_trends_from_sources", extra={"date": date_str})
 
     items: List[Dict[str, Any]] = []
+    # 1) Baidu 实时热榜
     try:
-        # 1) 免费且稳定：Hacker News 顶部新闻
-        items = _fetch_hn_top(limit=20)
+        items = _fetch_baidu_realtime(limit=20)
     except Exception as e:
-        LOG.error("trends_agg_error", extra={"date": date_str, "error": repr(e)})
+        LOG.error("trends_baidu_error", extra={"date": date_str, "error": repr(e)})
         items = []
 
+    # 2) 回退 HN
     if not items:
-        # 兜底：返回一个通用主题，确保流程可运行，避免每日空跑
+        try:
+            items = _fetch_hn_top(limit=20)
+        except Exception as e:
+            LOG.error("trends_hn_error", extra={"date": date_str, "error": repr(e)})
+            items = []
+
+    # 3) 最终兜底
+    if not items:
         fallback = [{"title": "AI 大模型与智能体最新进展", "url": ""}]
         LOG.info("trends_fallback_used", extra={"date": date_str, "items": len(fallback)})
         return fallback
