@@ -42,7 +42,8 @@ class AppSettings(BaseModel):
     classifier_kind: str = "gemini"  # gemini | openai_compat | service
     classifier_base_url: Optional[str] = None  # gemini 默认 https://generativelanguage.googleapis.com；openai_compat 需提供 OpenAI 兼容 BaseURL；service 为自建 /classify
     classifier_model: Optional[str] = "gemini-2.0-flash"
-    classifier_token: Optional[str] = None  # 用于 gemini/openai_compat
+    # 留空时将自动回退：gemini → 使用环境变量 GEMINI_API_KEY；openai_compat → 使用环境变量 OPENAI_API_KEY
+    classifier_token: Optional[str] = None
 
     # 分类集合
     category_list: List[str] = Field(default_factory=lambda: DEFAULT_CATEGORIES.copy())

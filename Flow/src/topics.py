@@ -286,7 +286,8 @@ def _ai_classify(topic: str, candidates: List[str]) -> Tuple[str, float]:
         model = model or "gemini-2.0-flash"
         return _invoke_classifier_gemini(base, model, token, topic, candidates)
     elif kind == "openai_compat":
-        token = token or os.environ.get("CLASSIFIER_TOKEN") or os.environ.get("OPENAI_API_KEY", "")
+        # 不再从 OPENAI_API_KEY 回退，只使用 CLASSIFIER_TOKEN（留空则不调用）
+        token = token or os.environ.get("CLASSIFIER_TOKEN") or ""
         model = model or "gpt-4o-mini"
         return _invoke_classifier_openai_compat(base, model, token, topic, candidates)
     else:
