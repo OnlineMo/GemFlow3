@@ -1,0 +1,35 @@
+# Root ignores for GemFlow3
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.env
+.env.*
+
+# Repo A runtime artifacts
+Flow/state/
+Flow/daily_trends/
+
+# Logs
+*.log
+logs/
+Flow/state/logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node/Frontend generic
+node_modules/
+*.local
+
+# UV / lockfiles (optional)
+uv.lock
+
+# Jupyter
+.ipynb_checkpoints/

@@ -1,0 +1,119 @@
+name: Daily DeepResearch
+
+on:
+  schedule:
+    - cron: '0 0 * * *'  # 北京时间每日 08:00 运行
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-deepresearch
+  cancel-in-progress: false
+
+jobs:
+  generate_report:
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      CLASSIFY_WITH_AI: ${{ vars.CLASSIFY_WITH_AI || 'false' }}
+      CLASSIFIER_KIND: ${{ vars.CLASSIFIER_KIND || 'gemini' }}
+      CLASSIFIER_BASE_URL: ${{ vars.CLASSIFIER_BASE_URL || '' }}
+      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.0-flash' }}
+      CLASSIFIER_TOKEN: ${{ secrets.CLASSIFIER_TOKEN || vars.CLASSIFIER_TOKEN || '' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('Flow/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install Flow dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r Flow/requirements.txt
+
+      - name: Build LangGraph API image
+        working-directory: gemini-fullstack-langgraph-quickstart
+        run: |
+          docker build -t gemini-fullstack-langgraph -f Dockerfile .
+
+      - name: Start engine via docker-compose
+        working-directory: gemini-fullstack-langgraph-quickstart
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          LANGSMITH_API_KEY: ${{ secrets.LANGSMITH_API_KEY }}
+          GEMINI_MODEL: ${{ env.GEMINI_MODEL }}
+        run: |
+          docker compose up -d
+
+      - name: Wait for engine readiness
+        run: |
+          set -e
+          echo "Waiting for engine http://localhost:8123 ..."
+          for i in $(seq 1 80); do
+            if curl -fsS http://localhost:8123/healthz >/dev/null 2>&1 || curl -fsS http://localhost:8123/openapi.json >/dev/null 2>&1; then
+              echo "Engine is ready"
+              exit 0
+            fi
+            echo "Waiting... $i"
+            sleep 3
+          done
+          echo "Engine failed to become ready" >&2
+          echo "=== docker ps -a ==="
+          docker ps -a || true
+          echo "=== langgraph-api logs (last 200 lines) ==="
+          docker logs --tail 200 langgraph-api || true
+          echo "=== langgraph-postgres logs (last 200 lines) ==="
+          docker logs --tail 200 langgraph-postgres || true
+          echo "=== langgraph-redis logs (last 200 lines) ==="
+          docker logs --tail 200 langgraph-redis || true
+          exit 1
+
+      - name: Configure git user
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Run daily workflow
+        env:
+          REPO_B_TOKEN: ${{ secrets.REPO_B_TOKEN }}
+          REPO_B: ${{ secrets.REPO_B }}
+          DEEPRESEARCH_BASE_URL: http://localhost:8123
+          TZ: Asia/Shanghai
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          CLASSIFY_WITH_AI: ${{ env.CLASSIFY_WITH_AI }}
+          CLASSIFIER_KIND: ${{ env.CLASSIFIER_KIND }}
+          CLASSIFIER_BASE_URL: ${{ env.CLASSIFIER_BASE_URL }}
+          CLASSIFIER_MODEL: ${{ env.CLASSIFIER_MODEL }}
+          CLASSIFIER_TOKEN: ${{ env.CLASSIFIER_TOKEN }}
+        run: |
+          python Flow/main_workflow.py
+
+      - name: Show docker logs on failure
+        if: failure()
+        run: |
+          docker ps -a || true
+          docker logs langgraph-api || true
+          docker logs langgraph-postgres || true
+          docker logs langgraph-redis || true
+
+      - name: Teardown docker
+        if: always()
+        working-directory: gemini-fullstack-langgraph-quickstart
+        run: |
+          docker compose down -v || true
