@@ -20,7 +20,7 @@ jobs:
       CLASSIFY_WITH_AI: ${{ vars.CLASSIFY_WITH_AI || 'false' }}
       CLASSIFIER_KIND: ${{ vars.CLASSIFIER_KIND || 'gemini' }}
       CLASSIFIER_BASE_URL: ${{ vars.CLASSIFIER_BASE_URL || '' }}
-      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.0-flash' }}
+      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.5-flash-lite' }}
       CLASSIFIER_TOKEN: ${{ secrets.CLASSIFIER_TOKEN || vars.CLASSIFIER_TOKEN || '' }}
 
     steps:
