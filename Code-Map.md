@@ -1,6 +1,6 @@
-# DeepResearch 自动化说明（Repo A → Repo B）
+# DeepResearch 自动化说明（GemFlow3 → DeepResearch-Archive）
 
-这个项目把“每日热点研究”这件事拆成两部分：Repo A 负责抓热点、生成报告并推送；Repo B 负责存放与展示报告。
+这个项目把“每日热点研究”这件事拆成两部分：GemFlow3 负责抓热点、生成报告并推送；DeepResearch-Archive 负责存放与展示报告。
 
 ---
 
@@ -23,7 +23,7 @@ cp Flow/.env.example .env
 - DEEPRESEARCH_BASE_URL=http://localhost:8123  # 指向后端引擎
 - TZ=Asia/Shanghai
 
-3) 运行（不推送 Repo B）
+3) 运行（不推送 DeepResearch-Archive）
 
 ```bash
 DRY_RUN=1 python Flow/main_workflow.py
@@ -35,7 +35,7 @@ DRY_RUN=1 python Flow/main_workflow.py
 
 ## 项目结构
 
-- 编排（Repo A）
+- 编排（GemFlow3）
   - 主流程：[Flow/main_workflow.py](Flow/main_workflow.py)
   - 配置加载：[Flow/src/config.py](Flow/src/config.py)
   - 引擎客户端：[Flow/src/engine_client.py](Flow/src/engine_client.py)
@@ -61,7 +61,7 @@ DRY_RUN=1 python Flow/main_workflow.py
 - TZ：时区（Asia/Shanghai）
 
 Secrets
-- REPO_B_TOKEN：Repo B 的 PAT（contents: write）
+- REPO_B_TOKEN：DeepResearch-Archive 的 PAT（contents: write）
 - GEMINI_API_KEY：仅当 CLASSIFIER_KIND=gemini 且未提供 CLASSIFIER_TOKEN 时作为回退
 - CLASSIFIER_TOKEN：分类后端的 token（优先于变量）
 - LANGSMITH_API_KEY：可选，仅示例容器使用
@@ -84,13 +84,13 @@ Token 解析顺序（分类）
 
 ## 工作原理（一句话版本）
 
-1) 抓热点 → 2) 提取候选 → 3) 去重并确定版次 → 4) 分类 → 5) 调后端引擎生成 Markdown → 6) 推送到 Repo B → 7) 更新导航/首页。
+1) 抓热点 → 2) 提取候选 → 3) 去重并确定版次 → 4) 分类 → 5) 调后端引擎生成 Markdown → 6) 推送到 DeepResearch-Archive → 7) 更新导航/首页。
 
 细节：
 - 热榜缓存：当天结果写入 Flow/daily_trends/{yyyy-mm-dd}.json，24h 内优先使用缓存。
 - 去重：topic 归一 + 日期 + 版次 → SHA-256 指纹。
 - 命名：{slugified_主题}-{日期}--v{版次}.md；分类目录为安全 slug。
-- 导航与首页：扫描 Repo B 的 AI_Reports 目录生成 NAVIGATION.md 与 README 最新区块。
+- 导航与首页：扫描 DeepResearch-Archive 的 AI_Reports 目录生成 NAVIGATION.md 与 README 最新区块。
 
 ---
 
@@ -109,7 +109,7 @@ Token 解析顺序（分类）
 
 - 文件：[.github/workflows/daily-deepresearch.yml](.github/workflows/daily-deepresearch.yml)
 - 关键点：
-  - 拉取代码 → 安装依赖 → 构建并启动引擎容器 → 健康检查 → 运行 Repo A → 采集日志 → 关停
+  - 拉取代码 → 安装依赖 → 构建并启动引擎容器 → 健康检查 → 运行 GemFlow3 → 采集日志 → 关停
   - 模型开关通过 Vars.GEMINI_MODEL 传递到容器；Flow 侧使用 DEEPRESEARCH_BASE_URL 调用
   - 分类相关 Vars/Secrets 会透传给 Flow 进程（详见上文“配置项”）
 
@@ -125,7 +125,7 @@ Token 解析顺序（分类）
 - 推送失败
   - 确认 REPO_B_TOKEN 作用于目标仓库且仅 contents: write 权限
 - 导航/首页不更新
-  - 渲染异常不会影响单篇报告保存；看流程日志与 Repo B 目录结构
+  - 渲染异常不会影响单篇报告保存；看流程日志与 DeepResearch-Archive 目录结构
 
 ---
 

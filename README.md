@@ -1,10 +1,10 @@
-# gemflow3 — 每日 DeepResearch 自动化（库 A → 库 B）+ LangGraph 引擎
+# Gemflow3 — 每日 DeepResearch 自动化（GemFlow3 → DeepResearch-Archive）+ LangGraph 引擎
 
-本仓库集成了“库 A 编排 + 库 B 内容归档展示 + LangGraph DeepResearch 引擎”一体化方案，实现每日自动抓取热点、生成结构化 Markdown 报告、推送到库 B，并自动更新 NAVIGATION.md 与 README 最新报告区块。
+本仓库集成了“GemFlow3 编排 + DeepResearch-Archive 内容归档展示 + LangGraph DeepResearch 引擎”一体化方案，实现每日自动抓取热点、生成结构化 Markdown 报告、推送到DeepResearch-Archive，并自动更新 NAVIGATION.md 与 README 最新报告区块。
 
-- 编排侧 Library A: Python 工作流，负责抓取→候选生成→分类→调用引擎→落库 B→更新导航与首页→幂等记录
+- 编排侧 Library A: Python 工作流，负责抓取→候选生成→分类→调用引擎→落DeepResearch-Archive→更新导航与首页→幂等记录
 - 引擎侧: 使用 Google Gemini + LangGraph 的研究代理，通过 web 搜索与反思迭代完成深入研究并产出可引用的回答
-- 运行形态: GitHub Actions 内部基于 docker-compose 拉起引擎 http://localhost:8123，然后执行库 A 主流程
+- 运行形态: GitHub Actions 内部基于 docker-compose 拉起引擎 http://localhost:8123，然后执行GemFlow3 主流程
 
 相关背景文档可见 [Code-Map.md](Code-Map.md)。
 
@@ -12,7 +12,7 @@
 
 ## 目录结构
 
-- 库 A（编排与自动化）
+- GemFlow3（编排与自动化）
   - 主流程入口: [Flow/main_workflow.py](Flow/main_workflow.py)
   - 依赖清单: [Flow/requirements.txt](Flow/requirements.txt)
   - 环境样例: [Flow/.env.example](Flow/.env.example)
@@ -40,18 +40,18 @@
 
 ```mermaid
 flowchart TD
-  subgraph A[库 A]
+  subgraph A[GemFlow3]
     A1[抓取 Google 热榜]
     A2[提取候选主题]
     A3[去重与版次]
     A4[分类]
     A5[调用 DeepResearch 引擎生成 Markdown]
-    A6[写入库 B AI_Reports]
+    A6[写入DeepResearch-Archive AI_Reports]
     A7[更新 NAVIGATION.md]
     A8[更新 README 最新区块]
     A9[记录 history.json 与日志]
   end
-  subgraph B[库 B]
+  subgraph B[DeepResearch-Archive]
     B1[AI_Reports 分类目录]
     B2[NAVIGATION.md]
     B3[README.md]
@@ -73,7 +73,7 @@ flowchart TD
 
 ## 快速开始
 
-### 方式 A：本地 dry-run（不推送库 B，仅验证流程）
+### 方式 A：本地 dry-run（不推送DeepResearch-Archive，仅验证流程）
 
 1) 安装依赖
 ```bash
@@ -102,19 +102,19 @@ TZ=Asia/Shanghai
 DRY_RUN=1 python Flow/main_workflow.py
 ```
 
-说明: dry-run 会调用引擎生成 Markdown（若 DEEPRESEARCH_BASE_URL 可用），但不推送到库 B。
+说明: dry-run 会调用引擎生成 Markdown（若 DEEPRESEARCH_BASE_URL 可用），但不推送到DeepResearch-Archive。
 
 ### 方式 B：CI 内部全自动（推荐）
 
 本仓库已提供每日定时工作流: [.github/workflows/daily-deepresearch.yml](.github/workflows/daily-deepresearch.yml)
 
 - 触发: 北京时间每日 00:00
-- 步骤: 构建镜像 → docker-compose 启动 LangGraph API → 探活 http://localhost:8123/openapi.json → 执行 [Flow/main_workflow.py](Flow/main_workflow.py) → 更新库 B → 清理
+- 步骤: 构建镜像 → docker-compose 启动 LangGraph API → 探活 http://localhost:8123/openapi.json → 执行 [Flow/main_workflow.py](Flow/main_workflow.py) → 更新DeepResearch-Archive → 清理
 
 在 GitHub 仓库 gemflow3 的 Settings → Secrets and variables → Actions 中配置：
 
 Secrets（机密）
-- REPO_B_TOKEN: 细粒度 PAT（仅 contents: write）指向库 B
+- REPO_B_TOKEN: 细粒度 PAT（仅 contents: write）指向DeepResearch-Archive
 - GEMINI_API_KEY: Google Gemini API 密钥（仅当 CLASSIFIER_KIND=gemini 且未提供 CLASSIFIER_TOKEN 时作为回退）
 - LANGSMITH_API_KEY: LangSmith API 密钥（仅用于 docker-compose 示例）
 - CLASSIFIER_TOKEN: 可选，分类后端 token。优先级 secrets.CLASSIFIER_TOKEN > vars.CLASSIFIER_TOKEN；若留空且 CLASSIFIER_KIND=gemini，则回退使用 GEMINI_API_KEY；openai_compat 不回退
@@ -145,10 +145,10 @@ Token 解析顺序（运行时）：
 
 ---
 
-## 库 B 期望结构
+## DeepResearch-Archive 期望结构
 
 - README.md
-- NAVIGATION.md（由库 A 幂等生成）
+- NAVIGATION.md（由GemFlow3 幂等生成）
 - AI_Reports/<分类slug>/<slugified_主题>-<yyyy-mm-dd>--vN.md
 - 可选: history.json（元数据索引）
 
@@ -164,7 +164,7 @@ Token 解析顺序（运行时）：
   - DEEPRESEARCH_BASE_URL [Var]: DeepResearch 引擎基址，CI 内为 http://localhost:8123
   - TZ [Var]: Asia/Shanghai
 - 可选
-  - REPO_B_TOKEN [Secret]: 推送库 B 的 PAT（本地 dry-run 可不填）
+  - REPO_B_TOKEN [Secret]: 推送DeepResearch-Archive 的 PAT（本地 dry-run 可不填）
   - CATEGORY_LIST [Var]: 逗号分隔分类集合（顺序影响导航展示顺序）
   - CLASSIFY_WITH_AI [Var]: 是否启用 AI 分类（true/false，默认 false）
   - CLASSIFIER_KIND [Var]: 分类后端类型（gemini | openai_compat | service）
@@ -193,8 +193,8 @@ Token 解析顺序（运行时）：
 
 - 引擎仓库: [gemini-fullstack-langgraph-quickstart/README.md](gemini-fullstack-langgraph-quickstart/README.md)
 - 图定义: [gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py](gemini-fullstack-langgraph-quickstart/backend/src/agent/graph.py)
-- Docker 打包后在 CI 中通过 docker-compose 暴露 8123 端口供库 A 调用
-- 库 A 调用入口: [Flow/src/engine_client.py](Flow/src/engine_client.py) → /graphs/agent/invoke
+- Docker 打包后在 CI 中通过 docker-compose 暴露 8123 端口供GemFlow3 调用
+- GemFlow3 调用入口: [Flow/src/engine_client.py](Flow/src/engine_client.py) → /graphs/agent/invoke
 
 ### AI 分类服务（可选）
 
@@ -252,7 +252,7 @@ git remote add origin git@github.com:<owner>/gemflow3.git
 git push -u origin main
 ```
 
-推送后，请在 gemflow3 仓库的 Settings → Secrets and variables → Actions 中添加 REPO_B_TOKEN、GEMINI_API_KEY、LANGSMITH_API_KEY，并确保 [.github/workflows/daily-deepresearch.yml](.github/workflows/daily-deepresearch.yml) 中 REPO_B 与你的库 B 坐标一致。
+推送后，请在 gemflow3 仓库的 Settings → Secrets and variables → Actions 中添加 REPO_B_TOKEN、GEMINI_API_KEY、LANGSMITH_API_KEY，并确保 [.github/workflows/daily-deepresearch.yml](.github/workflows/daily-deepresearch.yml) 中 REPO_B 与你的DeepResearch-Archive 坐标一致。
 
 ---
 
@@ -263,7 +263,7 @@ git push -u origin main
 - 无新增报告
   - 可能当日热榜为空或候选提取无有效主题（可查看日志 Flow/state/logs/*.jsonl）
 - 推送失败
-  - 确认 REPO_B_TOKEN 权限仅限 contents: write 且作用于库 B
+  - 确认 REPO_B_TOKEN 权限仅限 contents: write 且作用于DeepResearch-Archive
 - 模板不匹配
   - 引擎会遵循 Markdown 模板提示；如需更强约束，可在 [Flow/src/engine_client.py](Flow/src/engine_client.py) 中调整提示词
 
