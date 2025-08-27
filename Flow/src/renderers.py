@@ -4,7 +4,7 @@ import base64
 import re
 from dataclasses import dataclass
 from pathlib import PurePosixPath
-from typing import Any, Dict, List, Optional, Tuple, DefaultDict
+from typing import Any, Dict, List, Optional, Tuple, DefaultDict, Set
 from collections import defaultdict
 
 from slugify import slugify
@@ -308,3 +308,158 @@ def update_readme_latest_block(client: GitHubRepoClient, latest_limit: int = 10,
         commit_message="chore: update README latest block",
         branch=None,
     )
+
+
+def _collect_category_reports(items: List[NavItem], category_slug: str) -> List[NavItem]:
+    """
+    收集指定类别的所有报告
+    """
+    category_items = [item for item in items if item.category_slug == category_slug]
+    # 按标题首字母排序
+    return sorted(category_items, key=lambda x: x.title.lower())
+
+
+def generate_category_reports_md(client: GitHubRepoClient, category_slug: str) -> str:
+    """
+    生成指定类别的Reports.md内容，包含该类别所有报告，按标题首字母排序
+    """
+    ref = client.get_repo_ref()
+    tree = client.list_tree(ref.tree_sha, recursive=True)
+
+    # 收集指定类别的所有报告
+    category_reports: List[Tuple[str, str, str, int]] = []
+    for node in tree:
+        if node.get("type") != "blob":
+            continue
+        path = node.get("path") or ""
+        if not path.startswith(REPORT_PATH_PREFIX):
+            continue
+        parsed = _parse_report_path(path)
+        if not parsed:
+            continue
+        cat_slug, topic_slug, date_str, edition = parsed
+        if cat_slug == category_slug:
+            category_reports.append((cat_slug, topic_slug, date_str, edition))
+
+    if not category_reports:
+        return f"# {category_slug} 报告索引\n\n暂无报告。\n"
+
+    # 构造NavItem并获取详细信息
+    temp_items: List[NavItem] = [
+        NavItem(
+            category_slug=cat_slug,
+            relpath=to_posix(PurePosixPath("AI_Reports") / cat_slug / f"{topic_slug}-{date}--v{edition}.md"),
+            title=topic_slug,  # 先用 slug, 稍后替换为文件内"主题"
+            date=date,
+            edition=edition,
+            source_url=None,
+        )
+        for (cat_slug, topic_slug, date, edition) in category_reports
+    ]
+
+    # 获取报告的实际标题和来源
+    detailed_reports: List[NavItem] = []
+    for item in temp_items:
+        title, source = _fetch_title_and_source(client, item.relpath, ref.default_branch)
+        detailed_reports.append(
+            NavItem(
+                category_slug=item.category_slug,
+                relpath=item.relpath,
+                title=title or item.title,
+                date=item.date,
+                edition=item.edition,
+                source_url=source,
+            )
+        )
+
+    # 按标题首字母排序
+    sorted_reports = _collect_category_reports(detailed_reports, category_slug)
+
+    # 获取分类的显示名称
+    settings = get_settings()
+    slug_to_display = _slug_display_map(settings.category_list)
+    display_name = slug_to_display.get(category_slug, category_slug)
+
+    # 生成Markdown内容
+    lines: List[str] = [
+        f"# {display_name} 报告索引",
+        "",
+        f"本页包含 **{display_name}** 类别下的所有报告，按标题首字母排序。",
+        f"报告总数：{len(sorted_reports)}",
+        "",
+        "---",
+        "",
+    ]
+
+    current_letter = ""
+    for report in sorted_reports:
+        # 获取标题首字母
+        first_char = report.title[0].upper() if report.title else "#"
+        if first_char.isalpha():
+            letter = first_char
+        elif first_char.isdigit():
+            letter = "0-9"
+        else:
+            letter = "#"
+
+        # 如果是新的字母分组，添加标题
+        if letter != current_letter:
+            if current_letter:  # 不是第一个分组时添加空行
+                lines.append("")
+            lines.append(f"## {letter}")
+            lines.append("")
+            current_letter = letter
+
+        # 构建相对路径（去掉 AI_Reports/ 前缀）
+        relative_path = report.relpath
+        if relative_path.startswith("AI_Reports/"):
+            relative_path = relative_path[11:]  # 去掉 "AI_Reports/" 前缀
+
+        # 添加报告条目
+        src = f" [来源]({report.source_url})" if report.source_url else ""
+        lines.append(f"- [{report.title}]({relative_path}) - {report.date} (v{report.edition}){src}")
+
+    return "\n".join(lines) + "\n"
+
+
+def update_category_reports_md(client: GitHubRepoClient, category_slug: str) -> None:
+    """
+    更新指定类别的Reports.md文件
+    """
+    reports_md_content = generate_category_reports_md(client, category_slug)
+    reports_md_path = f"AI_Reports/{category_slug}/Reports.md"
+    
+    client.ensure_file_updated(
+        reports_md_path,
+        reports_md_content,
+        commit_message=f"chore: update {category_slug} Reports.md",
+        branch=None,
+    )
+
+
+def update_all_category_reports_md(client: GitHubRepoClient) -> None:
+    """
+    更新所有类别的Reports.md文件
+    """
+    ref = client.get_repo_ref()
+    tree = client.list_tree(ref.tree_sha, recursive=True)
+
+    # 收集所有存在的类别
+    existing_categories: Set[str] = set()
+    for node in tree:
+        if node.get("type") != "blob":
+            continue
+        path = node.get("path") or ""
+        if not path.startswith(REPORT_PATH_PREFIX):
+            continue
+        parsed = _parse_report_path(path)
+        if parsed:
+            existing_categories.add(parsed[0])
+
+    # 为每个类别更新Reports.md
+    for category_slug in existing_categories:
+        try:
+            update_category_reports_md(client, category_slug)
+            LOG.info("category_reports_updated", extra={"category": category_slug})
+        except Exception as e:
+            LOG.error("category_reports_update_failed", extra={"category": category_slug, "error": repr(e)})
