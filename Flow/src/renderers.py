@@ -10,7 +10,7 @@ from collections import defaultdict
 from slugify import slugify
 
 from .config import get_settings
-from .utils import replace_block, to_posix, today_str
+from .utils import replace_block, to_posix
 from .logger import get_logger
 from .github_api import GitHubRepoClient
 
@@ -197,29 +197,8 @@ def update_navigation_md(client: GitHubRepoClient, max_per_category: int = 20) -
 def _get_readme(client: GitHubRepoClient) -> str:
     data = client.get_contents("README.md")
     if not data:
-        # 提供新的 README 模板，按照用户要求
-        return """# DeepResearch — Today's Reports
-
-本页仅展示"当日最新报告"。历史与按分类的完整导航请见 NAVIGATION.md。此页内容由项目 A 自动生成并每日更新。
-
----
-
-使用说明:
-- 请勿手工修改 TODAY_REPORTS 与 DATE 标记之间的内容，本项目会幂等替换。
-- 历史导航：参见 NAVIGATION.md（按分类分组，日期倒序，最近 20 条）。
-- 报告存放路径：AI_Reports/<category_slug>/<title>-<date>--v<edition>.md
-
----
-
-相关文档:
-- NAVIGATION.md
-- PROJECT_OVERVIEW.md
-
----
-
-<!-- BEGIN TODAY_REPORTS -->
-<!-- END TODAY_REPORTS -->
-"""
+        # 提供缺省 README
+        return "# DeepResearch Archive\n\n<!-- BEGIN LATEST_REPORTS -->\n<!-- END LATEST_REPORTS -->\n"
     content_field = data.get("content")
     if not isinstance(content_field, str):
         return ""
@@ -232,19 +211,9 @@ def _collect_latest_across_categories(items: List[NavItem], limit: int = 10) -> 
     return items_sorted[:limit]
 
 
-def _collect_today_reports(items: List[NavItem]) -> List[NavItem]:
-    """
-    只收集今日的报告
-    """
-    today = today_str()
-    today_items = [item for item in items if item.date == today]
-    # 按版次倒序排序（同一天内最新版本优先）
-    return sorted(today_items, key=lambda x: x.edition, reverse=True)
-
-
 def update_readme_latest_block(client: GitHubRepoClient, latest_limit: int = 10, max_per_category: int = 20) -> None:
     """
-    构建今日报告区块并幂等写回 README。
+    构建最新报告区块并幂等写回 README。
     """
     ref = client.get_repo_ref()
     tree = client.list_tree(ref.tree_sha, recursive=True)
@@ -273,10 +242,10 @@ def update_readme_latest_block(client: GitHubRepoClient, latest_limit: int = 10,
         for (cat_slug, topic_slug, date, edition) in prelim
     ]
 
-    # 只读取今日报告的内容获取标题与来源
-    today_candidates = _collect_today_reports(temp_items)
+    # 只读取全局最新 limit 条的内容获取标题与来源, 降低 API 次数
+    latest_candidates = _collect_latest_across_categories(temp_items, limit=latest_limit)
     detailed: List[NavItem] = []
-    for it in today_candidates:
+    for it in latest_candidates:
         title, source = _fetch_title_and_source(client, it.relpath, ref.default_branch)
         detailed.append(
             NavItem(
@@ -289,18 +258,14 @@ def update_readme_latest_block(client: GitHubRepoClient, latest_limit: int = 10,
             )
         )
 
-    if detailed:
-        block_lines: List[str] = ["## 最新报告"]
-        for it in detailed:
-            src = f" [来源]({it.source_url})" if it.source_url else ""
-            block_lines.append(f"- [{it.title} - {it.date}]({it.relpath}) (v{it.edition}){src}")
-        block = "\n".join(block_lines)
-    else:
-        # 如果今日没有报告，显示提示信息
-        block = "## 最新报告\n今日暂无报告。"
+    block_lines: List[str] = ["## 最新报告"]
+    for it in detailed:
+        src = f" [来源]({it.source_url})" if it.source_url else ""
+        block_lines.append(f"- [{it.title} - {it.date}]({it.relpath}) (v{it.edition}){src}")
+    block = "\n".join(block_lines)
 
     readme = _get_readme(client)
-    new_readme = replace_block(readme, "TODAY_REPORTS", block)
+    new_readme = replace_block(readme, "LATEST_REPORTS", block)
 
     client.ensure_file_updated(
         "README.md",
