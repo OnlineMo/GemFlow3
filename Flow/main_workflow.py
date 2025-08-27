@@ -12,7 +12,7 @@ from src.topics import extract_candidates_via_ai, classify_topic
 from src.history import next_available_edition, record_status
 from src.engine_client import deepresearch_generate_markdown
 from src.github_api import GitHubRepoClient
-from src.renderers import update_navigation_md, update_readme_latest_block
+from src.renderers import update_navigation_md, update_readme_latest_block, update_all_category_reports_md
 from src.utils import report_relpath, to_posix, today_str, ensure_utf8
 
 
@@ -187,9 +187,10 @@ def main() -> int:
         try:
             update_navigation_md(client, max_per_category=20)
             update_readme_latest_block(client, latest_limit=10, max_per_category=20)
+            update_all_category_reports_md(client)
         except Exception as e:
-            # 导航/README 更新失败不影响单篇报告状态
-            LOG.error("nav_readme_update_failed", extra={"error": repr(e)})
+            # 导航/README/Reports 更新失败不影响单篇报告状态
+            LOG.error("nav_readme_reports_update_failed", extra={"error": repr(e)})
 
     LOG.info(
         "workflow_done",
