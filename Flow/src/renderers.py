@@ -200,13 +200,20 @@ def _get_readme(client: GitHubRepoClient) -> str:
         # 提供新的 README 模板，按照用户要求
         return """# DeepResearch — Today's Reports
 
-本页仅展示"当日最新报告"。历史与按分类的完整导航请见 NAVIGATION.md。此页内容由项目 A 自动生成并每日更新。
+本页仅展示"当日最新报告"。历史与按分类的完整导航请见 NAVIGATION.md。此页内容由 GemFlow 自动生成并每日更新。
+
+## 文档导航
+
+- **README.md**（本页）：展示今日最新报告
+- **NAVIGATION.md**：按分类浏览历史报告（每类最多20条，按日期倒序）
+- **AI_Reports/[类别]/Reports.md**：各类别完整报告索引（按标题首字母排序）
 
 ---
 
 使用说明:
 - 请勿手工修改 TODAY_REPORTS 与 DATE 标记之间的内容，本项目会幂等替换。
 - 历史导航：参见 NAVIGATION.md（按分类分组，日期倒序，最近 20 条）。
+- 完整索引：各类别的 Reports.md 包含该类别所有历史报告。
 - 报告存放路径：AI_Reports/<category_slug>/<title>-<date>--v<edition>.md
 
 ---
