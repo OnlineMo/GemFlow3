@@ -231,6 +231,9 @@ def generate_navigation_md(client: GitHubRepoClient, max_per_category: int = 20)
     for cat_slug, lst in grouped:
         display = slug_to_display.get(cat_slug, cat_slug)
         lines.append(f"## {display}")
+        # 添加该类别Reports.md的超链接
+        lines.append(f"[点击查看{display}完整报告索引 →](AI_Reports/{cat_slug}/Reports.md)")
+        lines.append("")  # 空行
         for it in [x for x in finalized if x.category_slug == cat_slug]:
             src = f" [来源]({it.source_url})" if it.source_url else ""
             lines.append(f"- [{it.title} - {it.date}]({it.relpath}) (v{it.edition}){src}")
