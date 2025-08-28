@@ -13,5 +13,6 @@ Jinja2==3.1.4
 
 # Utilities
 python-slugify==8.0.4
+pypinyin==0.51.0
 orjson==3.10.7
 tzdata==2024.1
