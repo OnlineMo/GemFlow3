@@ -8,6 +8,15 @@ from typing import Any, Dict, List, Optional, Tuple, DefaultDict, Set
 from collections import defaultdict
 
 from slugify import slugify
+try:
+    from pypinyin import lazy_pinyin, Style
+except ImportError:
+    # 如果没有安装 pypinyin，提供一个简单的回退函数
+    def lazy_pinyin(text, style=None):
+        return [text]  # 直接返回原文
+    
+    class Style:
+        FIRST_LETTER = None
 
 from .config import get_settings
 from .utils import replace_block, to_posix, today_str
@@ -33,6 +42,51 @@ class NavItem:
     date: str  # YYYY-MM-DD
     edition: int
     source_url: Optional[str] = None
+
+
+def _get_pinyin_first_letter(text: str) -> str:
+    """
+    获取文本的拼音首字母，用于排序和分组
+    """
+    if not text:
+        return "#"
+    
+    first_char = text[0]
+    
+    # 如果是数字，归入 0-9 组
+    if first_char.isdigit():
+        return "0-9"
+    
+    # 如果是英文字母，直接返回大写
+    if first_char.isalpha() and ord(first_char) < 128:
+        return first_char.upper()
+    
+    # 如果是中文或其他字符，转换为拼音首字母
+    try:
+        pinyin_list = lazy_pinyin(first_char, style=Style.FIRST_LETTER)
+        if pinyin_list and pinyin_list[0]:
+            return pinyin_list[0].upper()
+    except Exception:
+        pass
+    
+    # 其他情况归入 # 组
+    return "#"
+
+
+def _get_pinyin_sort_key(text: str) -> str:
+    """
+    获取文本的拼音排序键，用于字典序排序
+    """
+    if not text:
+        return ""
+    
+    try:
+        # 将整个文本转换为拼音
+        pinyin_list = lazy_pinyin(text, style=Style.TONE3)
+        return "".join(pinyin_list).lower()
+    except Exception:
+        # 如果转换失败，返回原文的小写
+        return text.lower()
 
 
 def _slug_display_map(categories: List[str]) -> Dict[str, str]:
@@ -202,6 +256,8 @@ def _get_readme(client: GitHubRepoClient) -> str:
 
 本页仅展示"当日最新报告"。历史与按分类的完整导航请见 NAVIGATION.md。此页内容由 GemFlow 自动生成并每日更新。
 
+**GemFlow3** 是一个自动化每日 DeepResearch 的工作流系统，集成了热榜抓取、主题分类、AI 生成报告、内容归档与导航更新等功能，旨在实现研究内容的自动化生产与结构化展示。
+
 ## 文档导航
 
 - **README.md**（本页）：展示今日最新报告
@@ -322,13 +378,13 @@ def _collect_category_reports(items: List[NavItem], category_slug: str) -> List[
     收集指定类别的所有报告
     """
     category_items = [item for item in items if item.category_slug == category_slug]
-    # 按标题首字母排序
-    return sorted(category_items, key=lambda x: x.title.lower())
+    # 按标题拼音字典序排序（首字母相同时按第二字母排序，依此类推）
+    return sorted(category_items, key=lambda x: _get_pinyin_sort_key(x.title))
 
 
 def generate_category_reports_md(client: GitHubRepoClient, category_slug: str) -> str:
     """
-    生成指定类别的Reports.md内容，包含该类别所有报告，按标题首字母排序
+    生成指定类别的Reports.md内容，包含该类别所有报告，按拼音首字母字典序排序
     """
     ref = client.get_repo_ref()
     tree = client.list_tree(ref.tree_sha, recursive=True)
@@ -379,7 +435,7 @@ def generate_category_reports_md(client: GitHubRepoClient, category_slug: str) -
             )
         )
 
-    # 按标题首字母排序
+    # 按标题字典序排序
     sorted_reports = _collect_category_reports(detailed_reports, category_slug)
 
     # 获取分类的显示名称
@@ -391,7 +447,7 @@ def generate_category_reports_md(client: GitHubRepoClient, category_slug: str) -
     lines: List[str] = [
         f"# {display_name} 报告索引",
         "",
-        f"本页包含 **{display_name}** 类别下的所有报告，按标题首字母排序。",
+        f"本页包含 **{display_name}** 类别下的所有报告，按拼音首字母字典序排序。",
         f"报告总数：{len(sorted_reports)}",
         "",
         "---",
@@ -400,14 +456,8 @@ def generate_category_reports_md(client: GitHubRepoClient, category_slug: str) -
 
     current_letter = ""
     for report in sorted_reports:
-        # 获取标题首字母
-        first_char = report.title[0].upper() if report.title else "#"
-        if first_char.isalpha():
-            letter = first_char
-        elif first_char.isdigit():
-            letter = "0-9"
-        else:
-            letter = "#"
+        # 获取标题拼音首字母
+        letter = _get_pinyin_first_letter(report.title)
 
         # 如果是新的字母分组，添加标题
         if letter != current_letter:
