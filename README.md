@@ -1,3 +1,5 @@
+# 第一个可用版本
+
 # Gemflow3 — 每日 DeepResearch 自动化（GemFlow3 → DeepResearch-Archive）+ LangGraph 引擎
 
 本仓库集成了“GemFlow3 编排 + DeepResearch-Archive 内容归档展示 + LangGraph DeepResearch 引擎”一体化方案，实现每日自动抓取热点、生成结构化 Markdown 报告、推送到DeepResearch-Archive，并自动更新 NAVIGATION.md 与 README 最新报告区块。
