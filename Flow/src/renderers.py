@@ -470,10 +470,11 @@ def generate_category_reports_md(client: GitHubRepoClient, category_slug: str) -
             lines.append("")
             current_letter = letter
 
-        # 构建相对路径（去掉 AI_Reports/ 前缀）
+        # 构建相对路径（去掉 AI_Reports/<分类> 前缀）
         relative_path = report.relpath
-        if relative_path.startswith("AI_Reports/"):
-            relative_path = relative_path[11:]  # 去掉 "AI_Reports/" 前缀
+        if relative_path.startswith(f"AI_Reports/{category_slug}/"):
+            relative_path = relative_path[len(f"AI_Reports/{category_slug}/"):]
+
 
         # 添加报告条目
         src = f" [来源]({report.source_url})" if report.source_url else ""
