@@ -16,11 +16,11 @@ jobs:
   generate_report:
     runs-on: ubuntu-latest
     env:
-      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-flash' }}
+      GEMINI_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-2.5-pro' }}
       CLASSIFY_WITH_AI: ${{ vars.CLASSIFY_WITH_AI || 'false' }}
       CLASSIFIER_KIND: ${{ vars.CLASSIFIER_KIND || 'gemini' }}
       CLASSIFIER_BASE_URL: ${{ vars.CLASSIFIER_BASE_URL || '' }}
-      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.0-flash' }}
+      CLASSIFIER_MODEL: ${{ vars.CLASSIFIER_MODEL || 'gemini-2.5-flash' }}
       CLASSIFIER_TOKEN: ${{ secrets.CLASSIFIER_TOKEN || vars.CLASSIFIER_TOKEN || '' }}
 
     steps:
