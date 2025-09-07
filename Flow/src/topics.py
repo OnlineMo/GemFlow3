@@ -210,7 +210,15 @@ def _default_classifier_base_url(kind: str) -> str:
 def _effective_classifier_base_url() -> tuple[str, str]:
     s = get_settings()
     kind = (getattr(s, "classifier_kind", "gemini") or "gemini").lower()
-    base = (getattr(s, "classifier_base_url", "") or "").strip() or _default_classifier_base_url(kind)
+    # 1) 优先使用 settings.classifier_base_url
+    base = (getattr(s, "classifier_base_url", "") or "").strip()
+    # 2) 留空时回退：CLASSIFIER_BASE_URL（env）→ DEEPRESEARCH_AI_BASE_URL（env）
+    if not base:
+        env_base = (os.environ.get("CLASSIFIER_BASE_URL") or os.environ.get("DEEPRESEARCH_AI_BASE_URL") or "").strip()
+        base = env_base
+    # 3) 仍为空则按 KIND 使用官方默认
+    if not base:
+        base = _default_classifier_base_url(kind)
     return (base or "").rstrip("/"), kind
 
 

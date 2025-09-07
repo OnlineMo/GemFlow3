@@ -38,6 +38,36 @@ def _get_gemini_api_key() -> str:
     key = os.getenv("GEMINI_API_KEY", "").strip()
     return key
 
+def _genai_generate_content(model, contents, config):
+    """
+    Robust generate_content via google.genai Client with DEEPRESEARCH_AI_BASE_URL normalization.
+    Tries provided base as-is; if it ends with /v1 or /v1beta also tries trimmed variant;
+    else also tries appending /v1beta.
+    """
+    api_key = _get_gemini_api_key()
+    base = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
+    attempts = []
+    if base:
+        b = base.rstrip("/")
+        attempts.append(b)
+        if b.endswith("/v1"):
+            attempts.append(b[:-3].rstrip("/"))
+        elif b.endswith("/v1beta"):
+            attempts.append(b[:-7].rstrip("/"))
+        else:
+            attempts.append(b + "/v1beta")
+    else:
+        attempts.append(None)
+    last_exc = None
+    for ab in attempts:
+        try:
+            client = Client(api_key=api_key, base_url=ab) if ab else Client(api_key=api_key)
+            return client.models.generate_content(model=model, contents=contents, config=config)
+        except Exception as e:
+            last_exc = e
+            continue
+    raise last_exc
+
 # Note: Defer external client creation to runtime inside nodes to avoid import-time failures
 
 
@@ -142,25 +172,24 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
     )
 
     # Uses the google genai client as the langchain client doesn't return grounding metadata
-    api_key = _get_gemini_api_key()
-    base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
-    client = Client(api_key=api_key, base_url=base_url) if base_url else Client(api_key=api_key)
-    response = client.models.generate_content(
-        model=configurable.query_generator_model,
-        contents=formatted_prompt,
-        config={
-            "tools": [{"google_search": {}}],
-            "temperature": 0,
-        },
+    response = _genai_generate_content(
+        configurable.query_generator_model,
+        formatted_prompt,
+        {"tools": [{"google_search": {}}], "temperature": 0},
     )
-    # resolve the urls to short urls for saving tokens and time
-    resolved_urls = resolve_urls(
-        response.candidates[0].grounding_metadata.grounding_chunks, state["id"]
-    )
-    # Gets the citations and adds them to the generated text
+
+    # Resolve grounding safely (keys may be absent if the account/region disallows google_search tool)
+    try:
+        chunks = response.candidates[0].grounding_metadata.grounding_chunks
+        resolved_urls = resolve_urls(chunks, state["id"])
+    except Exception:
+        resolved_urls = {}
+
+    # Gets the citations and adds them to the generated text (gracefully handle no-grounding case)
     citations = get_citations(response, resolved_urls)
-    modified_text = insert_citation_markers(response.text, citations)
-    sources_gathered = [item for citation in citations for item in citation["segments"]]
+    base_text = getattr(response, "text", "") or ""
+    modified_text = insert_citation_markers(base_text, citations) if citations else base_text
+    sources_gathered = [item for citation in citations for item in citation.get("segments", [])]
 
     return {
         "sources_gathered": sources_gathered,
@@ -198,17 +227,16 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     # init Reasoning Model
     base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
     if base_url:
-        client = Client(api_key=_get_gemini_api_key(), base_url=base_url)
         json_prompt = (
             formatted_prompt
             + "\n\n仅返回一个JSON对象，严格包含字段："
             + "{\"is_sufficient\": <true|false>, \"knowledge_gap\": \"...\", \"follow_up_queries\": [\"...\"]}。"
             + "不要输出任何额外文本。"
         )
-        response = client.models.generate_content(
-            model=reasoning_model,
-            contents=json_prompt,
-            config={"temperature": 1.0},
+        response = _genai_generate_content(
+            reasoning_model,
+            json_prompt,
+            {"temperature": 1.0},
         )
         text = getattr(response, "text", "") or ""
         is_sufficient = False
@@ -316,11 +344,10 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     # init Reasoning Model, default to Gemini 2.5 Flash
     base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
     if base_url:
-        client = Client(api_key=_get_gemini_api_key(), base_url=base_url)
-        response = client.models.generate_content(
-            model=reasoning_model,
-            contents=formatted_prompt,
-            config={"temperature": 0},
+        response = _genai_generate_content(
+            reasoning_model,
+            formatted_prompt,
+            {"temperature": 0},
         )
         result_text = getattr(response, "text", "") or ""
         # Wrap into AIMessage to keep downstream logic unchanged

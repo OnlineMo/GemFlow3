@@ -91,7 +91,7 @@ TZ=Asia/Shanghai
 # 可选：开启 AI 分类
 # CLASSIFY_WITH_AI=false
 # CLASSIFIER_KIND=gemini         # gemini | openai_compat | service
-# CLASSIFIER_BASE_URL=           # 留空使用默认：gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1
+# CLASSIFIER_BASE_URL=           # 留空→回退 DEEPRESEARCH_AI_BASE_URL；若也为空→按 KIND 默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
 # CLASSIFIER_MODEL=gemini-2.0-flash  # openai_compat 示例：gpt-4o-mini
 # CLASSIFIER_TOKEN=              # 对 gemini/openai_compat 生效
 
@@ -125,7 +125,7 @@ Variables（非机密）
 - DEEPRESEARCH_AI_BASE_URL: DeepResearch 引擎 AI 调用 BaseURL（留空使用默认：gemini→https://generativelanguage.googleapis.com）
 - CLASSIFY_WITH_AI: 是否启用 AI 分类（默认 false）
 - CLASSIFIER_KIND: 分类后端类型（默认 gemini，可选 openai_compat/service）
-- CLASSIFIER_BASE_URL: 分类服务 BaseURL（留空时按 KIND 使用官方默认）
+- CLASSIFIER_BASE_URL: 分类服务 BaseURL（留空时回退 DEEPRESEARCH_AI_BASE_URL；若 DEEPRESEARCH_AI_BASE_URL 也为空，则按 KIND 使用官方默认）
 - CLASSIFIER_MODEL: 分类模型名（默认 gemini-2.0-flash）
 - CLASSIFIER_TOKEN: 可选，如不想放 Secret 可使用变量，但生产建议使用 Secret
 
@@ -133,6 +133,11 @@ Token 解析顺序（运行时）：
 1) CLASSIFIER_TOKEN（Secrets/Vars）
 2) KIND=gemini 时回退 GEMINI_API_KEY
 3) 其他情况留空（禁用 AI 分类调用，回退关键词规则）
+
+BaseURL 解析顺序（运行时）：
+1) CLASSIFIER_BASE_URL
+2) DEEPRESEARCH_AI_BASE_URL
+3) KIND 默认基址（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
 
 环境变量注入见工作流中的 Run daily workflow 步骤（括号内为来源类型）：
 - REPO_B: owner/DeepResearch-Archive（Var）
@@ -172,7 +177,7 @@ Token 解析顺序（运行时）：
   - CATEGORY_LIST [Var]: 逗号分隔分类集合（顺序影响导航展示顺序）
   - CLASSIFY_WITH_AI [Var]: 是否启用 AI 分类（true/false，默认 false）
   - CLASSIFIER_KIND [Var]: 分类后端类型（gemini | openai_compat | service）
-  - CLASSIFIER_BASE_URL [Var]: 分类服务 BaseURL；留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
+  - CLASSIFIER_BASE_URL [Var]: 分类服务 BaseURL；留空→回退 DEEPRESEARCH_AI_BASE_URL；若也为空→按 KIND 默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
   - CLASSIFIER_MODEL [Var]: 分类模型名（gemini 默认 gemini-2.0-flash；openai_compat 示例 gpt-4o-mini）
   - CLASSIFIER_TOKEN [Secret/Var]: 优先 secrets.CLASSIFIER_TOKEN → vars.CLASSIFIER_TOKEN；若留空且 KIND=gemini，则回退 GEMINI_API_KEY；openai_compat 不回退
   - URL_WHITELIST [Var]: 逗号分隔的域名白名单（预留内容安全过滤）
