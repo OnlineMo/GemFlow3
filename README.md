@@ -164,11 +164,11 @@ Token 解析顺序（运行时）：
 
 - 必填
   - REPO_B [Var]: 目标仓库坐标，如 owner/DeepResearch-Archive
+  - REPO_B_TOKEN [Secret]: 推送DeepResearch-Archive 的 PAT（本地 dry-run 可不填）
 - 可选
   - TZ [Var]: Asia/Shanghai
   - DEEPRESEARCH_BASE_URL [Var]: DeepResearch 引擎基址，CI 内为 http://localhost:8123
   - DEEPRESEARCH_AI_BASE_URL [Var]: DeepResearch 引擎 AI 模型调用 BaseURL；留空使用默认（gemini格式→https://generativelanguage.googleapis.com）
-  - REPO_B_TOKEN [Secret]: 推送DeepResearch-Archive 的 PAT（本地 dry-run 可不填）
   - CATEGORY_LIST [Var]: 逗号分隔分类集合（顺序影响导航展示顺序）
   - CLASSIFY_WITH_AI [Var]: 是否启用 AI 分类（true/false，默认 false）
   - CLASSIFIER_KIND [Var]: 分类后端类型（gemini | openai_compat | service）
