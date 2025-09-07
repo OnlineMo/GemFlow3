@@ -61,12 +61,30 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         state["initial_search_query_count"] = configurable.number_of_initial_queries
 
     # init Gemini 2.0 Flash
-    llm = ChatGoogleGenerativeAI(
-        model=configurable.query_generator_model,
-        temperature=1.0,
-        max_retries=2,
-        api_key=_get_gemini_api_key(),
-    )
+    base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
+    if base_url:
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model=configurable.query_generator_model,
+                temperature=1.0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+                base_url=base_url,
+            )
+        except TypeError:
+            llm = ChatGoogleGenerativeAI(
+                model=configurable.query_generator_model,
+                temperature=1.0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+            )
+    else:
+        llm = ChatGoogleGenerativeAI(
+            model=configurable.query_generator_model,
+            temperature=1.0,
+            max_retries=2,
+            api_key=_get_gemini_api_key(),
+        )
     structured_llm = llm.with_structured_output(SearchQueryList)
 
     # Format the prompt
@@ -113,7 +131,8 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
 
     # Uses the google genai client as the langchain client doesn't return grounding metadata
     api_key = _get_gemini_api_key()
-    client = Client(api_key=api_key)
+    base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
+    client = Client(api_key=api_key, base_url=base_url) if base_url else Client(api_key=api_key)
     response = client.models.generate_content(
         model=configurable.query_generator_model,
         contents=formatted_prompt,
@@ -165,12 +184,30 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
         summaries="\n\n---\n\n".join(state["web_research_result"]),
     )
     # init Reasoning Model
-    llm = ChatGoogleGenerativeAI(
-        model=reasoning_model,
-        temperature=1.0,
-        max_retries=2,
-        api_key=_get_gemini_api_key(),
-    )
+    base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
+    if base_url:
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model=reasoning_model,
+                temperature=1.0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+                base_url=base_url,
+            )
+        except TypeError:
+            llm = ChatGoogleGenerativeAI(
+                model=reasoning_model,
+                temperature=1.0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+            )
+    else:
+        llm = ChatGoogleGenerativeAI(
+            model=reasoning_model,
+            temperature=1.0,
+            max_retries=2,
+            api_key=_get_gemini_api_key(),
+        )
     result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
 
     return {
@@ -244,12 +281,30 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     )
 
     # init Reasoning Model, default to Gemini 2.5 Flash
-    llm = ChatGoogleGenerativeAI(
-        model=reasoning_model,
-        temperature=0,
-        max_retries=2,
-        api_key=_get_gemini_api_key(),
-    )
+    base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
+    if base_url:
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model=reasoning_model,
+                temperature=0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+                base_url=base_url,
+            )
+        except TypeError:
+            llm = ChatGoogleGenerativeAI(
+                model=reasoning_model,
+                temperature=0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+            )
+    else:
+        llm = ChatGoogleGenerativeAI(
+            model=reasoning_model,
+            temperature=0,
+            max_retries=2,
+            api_key=_get_gemini_api_key(),
+        )
     result = llm.invoke(formatted_prompt)
 
     # Replace the short urls with the original urls and add all used urls to the sources_gathered

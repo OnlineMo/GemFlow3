@@ -120,12 +120,24 @@ async def classify(req: ClassifyRequest):
 
     try:
         # 低温度/严格 JSON 输出提示，尽量减少跑长链路的开销
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
-            temperature=0,
-            max_retries=2,
-            api_key=api_key,
-        )
+        base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
+        model_name = os.getenv("CLASSIFIER_MODEL", "gemini-2.0-flash").strip()
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model=model_name,
+                temperature=0,
+                max_retries=2,
+                api_key=api_key,
+                **({"base_url": base_url} if base_url else {}),
+            )
+        except TypeError:
+            # 兼容旧版 langchain-google-genai（不支持 base_url 参数）
+            llm = ChatGoogleGenerativeAI(
+                model=model_name,
+                temperature=0,
+                max_retries=2,
+                api_key=api_key,
+            )
         instructions = (
             "你是一个分类器。仅从给定候选集中选择一个最适合的分类，"
             "并仅返回JSON：{\"category\":\"<候选之一>\",\"confidence\":<0到1之间的小数>}。"

@@ -86,6 +86,7 @@ pip install -r Flow/requirements.txt
 REPO_B=owner/DeepResearch-Archive
 DEEPRESEARCH_BASE_URL=http://localhost:8123
 TZ=Asia/Shanghai
+# DEEPRESEARCH_AI_BASE_URL=      # DeepResearch 引擎 AI 调用 BaseURL；留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1），可指向自有中转站。
 
 # 可选：开启 AI 分类
 # CLASSIFY_WITH_AI=false
@@ -121,6 +122,7 @@ Secrets（机密）
 
 Variables（非机密）
 - GEMINI_MODEL: 默认 gemini-2.5-flash（引擎统一切换）
+- DEEPRESEARCH_AI_BASE_URL: DeepResearch 引擎 AI 调用 BaseURL（留空使用默认：gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
 - CLASSIFY_WITH_AI: 是否启用 AI 分类（默认 false）
 - CLASSIFIER_KIND: 分类后端类型（默认 gemini，可选 openai_compat/service）
 - CLASSIFIER_BASE_URL: 分类服务 BaseURL（留空时按 KIND 使用官方默认）
@@ -135,6 +137,7 @@ Token 解析顺序（运行时）：
 环境变量注入见工作流中的 Run daily workflow 步骤（括号内为来源类型）：
 - REPO_B: owner/DeepResearch-Archive（Var）
 - DEEPRESEARCH_BASE_URL: http://localhost:8123（Var）
+- DEEPRESEARCH_AI_BASE_URL: ${{ vars.DEEPRESEARCH_AI_BASE_URL || '' }}（Var）
 - TZ: Asia/Shanghai（Var）
 - GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}（Secret；仅 KIND=gemini 且未提供 CLASSIFIER_TOKEN 时作为回退）
 - CLASSIFY_WITH_AI: ${{ vars.CLASSIFY_WITH_AI || 'false' }}（Var）
@@ -161,9 +164,10 @@ Token 解析顺序（运行时）：
 
 - 必填
   - REPO_B [Var]: 目标仓库坐标，如 owner/DeepResearch-Archive
-  - DEEPRESEARCH_BASE_URL [Var]: DeepResearch 引擎基址，CI 内为 http://localhost:8123
-  - TZ [Var]: Asia/Shanghai
 - 可选
+  - TZ [Var]: Asia/Shanghai
+  - DEEPRESEARCH_BASE_URL [Var]: DeepResearch 引擎基址，CI 内为 http://localhost:8123
+  - DEEPRESEARCH_AI_BASE_URL [Var]: DeepResearch 引擎 AI 模型调用 BaseURL；留空使用默认（gemini格式→https://generativelanguage.googleapis.com）
   - REPO_B_TOKEN [Secret]: 推送DeepResearch-Archive 的 PAT（本地 dry-run 可不填）
   - CATEGORY_LIST [Var]: 逗号分隔分类集合（顺序影响导航展示顺序）
   - CLASSIFY_WITH_AI [Var]: 是否启用 AI 分类（true/false，默认 false）

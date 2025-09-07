@@ -45,6 +45,7 @@ services:
       POSTGRES_URI: postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable
       GOOGLE_API_KEY: ${GEMINI_API_KEY}
       GEMINI_MODEL: ${GEMINI_MODEL}
+      DEEPRESEARCH_AI_BASE_URL: ${DEEPRESEARCH_AI_BASE_URL}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
       interval: 5s
