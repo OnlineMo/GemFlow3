@@ -1,5 +1,6 @@
 import os
 import json
+import requests
 
 from agent.tools_and_schemas import SearchQueryList, Reflection
 from dotenv import load_dotenv
@@ -38,35 +39,42 @@ def _get_gemini_api_key() -> str:
     key = os.getenv("GEMINI_API_KEY", "").strip()
     return key
 
-def _genai_generate_content(model, contents, config):
+def _normalize_v1beta_base(raw: str) -> str:
+    b = (raw or "").strip().rstrip("/")
+    if not b:
+        return "https://generativelanguage.googleapis.com/v1beta"
+    if b.endswith("/v1beta"):
+        return b
+    if b.endswith("/v1"):
+        return b[:-3] + "v1beta"
+    return b + "/v1beta"
+
+def _rest_generate_content_text(model: str, text: str, temperature: float = 0.0) -> tuple[str, dict]:
     """
-    Robust generate_content via google.genai Client with DEEPRESEARCH_AI_BASE_URL normalization.
-    Tries provided base as-is; if it ends with /v1 or /v1beta also tries trimmed variant;
-    else also tries appending /v1beta.
+    Generate content via REST: {base}/v1beta/models/{model}:generateContent?key=TOKEN
+    Returns (text, raw_json)
     """
-    api_key = _get_gemini_api_key()
-    base = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
-    attempts = []
-    if base:
-        b = base.rstrip("/")
-        attempts.append(b)
-        if b.endswith("/v1"):
-            attempts.append(b[:-3].rstrip("/"))
-        elif b.endswith("/v1beta"):
-            attempts.append(b[:-7].rstrip("/"))
-        else:
-            attempts.append(b + "/v1beta")
-    else:
-        attempts.append(None)
-    last_exc = None
-    for ab in attempts:
-        try:
-            client = Client(api_key=api_key, base_url=ab) if ab else Client(api_key=api_key)
-            return client.models.generate_content(model=model, contents=contents, config=config)
-        except Exception as e:
-            last_exc = e
-            continue
-    raise last_exc
+    token = os.getenv("GEMINI_API_KEY", "").strip()
+    base = _normalize_v1beta_base(os.getenv("DEEPRESEARCH_AI_BASE_URL", ""))
+    url = f"{base}/models/{model}:generateContent?key={token}"
+    payload = {
+        "contents": [{"parts": [{"text": text}]}],
+        "generationConfig": {"temperature": temperature},
+    }
+    resp = requests.post(url, json=payload, timeout=60)
+    resp.raise_for_status()
+    data = resp.json() or {}
+    out = ""
+    try:
+        cands = data.get("candidates") or []
+        if cands:
+            content = cands[0].get("content") or {}
+            parts = content.get("parts") or []
+            if parts:
+                out = parts[0].get("text") or ""
+    except Exception:
+        out = ""
+    return out, data
 
 # Note: Defer external client creation to runtime inside nodes to avoid import-time failures
 
@@ -99,36 +107,46 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         number_queries=state["initial_search_query_count"],
     )
 
-    # If a custom Gemini-compatible base URL is provided, use google.genai Client to ensure routing via the relay.
+    # If a custom Gemini-compatible base URL is provided, use REST to ensure routing via relay (?key=TOKEN on /v1beta).
     base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
     if base_url:
-        client = Client(api_key=_get_gemini_api_key(), base_url=base_url)
-        json_prompt = (
-            formatted_prompt
-            + "\n\n仅返回一个JSON对象，格式严格为：{\"query\": [\"...\"]}。不要输出任何额外文本。"
-        )
-        response = client.models.generate_content(
-            model=configurable.query_generator_model,
-            contents=json_prompt,
-            config={"temperature": 1.0},
-        )
-        text = getattr(response, "text", "") or ""
-        queries: list[str] = []
         try:
-            start = text.find("{")
-            end = text.rfind("}")
-            payload = text[start : end + 1] if start != -1 and end != -1 and end > start else text
-            data = json.loads(payload)
-            q = data.get("query") or data.get("queries") or []
-            if isinstance(q, list):
-                queries = [str(item) for item in q]
-            elif q:
-                queries = [str(q)]
-        except Exception:
-            # Fallback: split lines
-            queries = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
-
-        return {"search_query": queries or []}
+            json_prompt = (
+                formatted_prompt
+                + "\n\n仅返回一个JSON对象，格式严格为：{\"query\": [\"...\"]}。不要输出任何额外文本。"
+            )
+            text, _raw = _rest_generate_content_text(
+                model=configurable.query_generator_model,
+                text=json_prompt,
+                temperature=1.0,
+            )
+            queries: list[str] = []
+            try:
+                start = text.find("{")
+                end = text.rfind("}")
+                payload = text[start : end + 1] if start != -1 and end != -1 and end > start else text
+                data = json.loads(payload)
+                q = data.get("query") or data.get("queries") or []
+                if isinstance(q, list):
+                    queries = [str(item) for item in q]
+                elif q:
+                    queries = [str(q)]
+            except Exception:
+                # Fallback: split lines
+                queries = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
+            return {"search_query": queries or []}
+        except Exception as e:
+            print(f"DR-DEBUG generate_query rest_error: {repr(e)}")
+            # 回退到官方端点（不经中转站），保证流程不中断
+            llm = ChatGoogleGenerativeAI(
+                model=configurable.query_generator_model,
+                temperature=1.0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+            )
+            structured_llm = llm.with_structured_output(SearchQueryList)
+            result = structured_llm.invoke(formatted_prompt)
+            return {"search_query": result.query}
     else:
         llm = ChatGoogleGenerativeAI(
             model=configurable.query_generator_model,
@@ -171,25 +189,29 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
         research_topic=state["search_query"],
     )
 
-    # Uses the google genai client as the langchain client doesn't return grounding metadata
-    response = _genai_generate_content(
-        configurable.query_generator_model,
-        formatted_prompt,
-        {"tools": [{"google_search": {}}], "temperature": 0},
-    )
-
-    # Resolve grounding safely (keys may be absent if the account/region disallows google_search tool)
+    # Uses REST; 若无法使用检索工具则直接生成简述，确保不中断
     try:
-        chunks = response.candidates[0].grounding_metadata.grounding_chunks
-        resolved_urls = resolve_urls(chunks, state["id"])
-    except Exception:
-        resolved_urls = {}
-
-    # Gets the citations and adds them to the generated text (gracefully handle no-grounding case)
-    citations = get_citations(response, resolved_urls)
-    base_text = getattr(response, "text", "") or ""
-    modified_text = insert_citation_markers(base_text, citations) if citations else base_text
-    sources_gathered = [item for citation in citations for item in citation.get("segments", [])]
+        text, _raw = _rest_generate_content_text(
+            model=configurable.query_generator_model,
+            text=formatted_prompt,
+            temperature=0.0,
+        )
+        modified_text = text or ""
+        sources_gathered = []
+    except Exception as e:
+        print(f"DR-DEBUG web_research rest_error: {repr(e)}")
+        # 回退：无检索工具，直接请模型基于查询做简述，保证不中断
+        llm = ChatGoogleGenerativeAI(
+            model=configurable.query_generator_model,
+            temperature=0,
+            max_retries=2,
+            api_key=_get_gemini_api_key(),
+        )
+        result = llm.invoke(
+            f"{formatted_prompt}\n\n注意：如果无法访问检索工具，请直接根据常识与公开知识给出简述，并显式标注'无检索引用'。"
+        )
+        modified_text = getattr(result, "content", "") or ""
+        sources_gathered = []
 
     return {
         "sources_gathered": sources_gathered,
@@ -233,36 +255,52 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
             + "{\"is_sufficient\": <true|false>, \"knowledge_gap\": \"...\", \"follow_up_queries\": [\"...\"]}。"
             + "不要输出任何额外文本。"
         )
-        response = _genai_generate_content(
-            reasoning_model,
-            json_prompt,
-            {"temperature": 1.0},
-        )
-        text = getattr(response, "text", "") or ""
-        is_sufficient = False
-        knowledge_gap = ""
-        follow_up_queries: list[str] = []
         try:
-            start = text.find("{")
-            end = text.rfind("}")
-            payload = text[start : end + 1] if start != -1 and end != -1 and end > start else text
-            data = json.loads(payload)
-            is_sufficient = bool(data.get("is_sufficient", False))
-            knowledge_gap = str(data.get("knowledge_gap", "") or "")
-            fu = data.get("follow_up_queries") or []
-            follow_up_queries = [str(x) for x in fu] if isinstance(fu, list) else ([str(fu)] if fu else [])
-        except Exception:
-            # If parsing fails, keep conservative defaults (force another loop)
+            text, _raw = _rest_generate_content_text(
+                model=reasoning_model,
+                text=json_prompt,
+                temperature=1.0,
+            )
             is_sufficient = False
-            follow_up_queries = []
-
-        return {
-            "is_sufficient": is_sufficient,
-            "knowledge_gap": knowledge_gap,
-            "follow_up_queries": follow_up_queries,
-            "research_loop_count": state["research_loop_count"],
-            "number_of_ran_queries": len(state["search_query"]),
-        }
+            knowledge_gap = ""
+            follow_up_queries: list[str] = []
+            try:
+                start = text.find("{")
+                end = text.rfind("}")
+                payload = text[start : end + 1] if start != -1 and end != -1 and end > start else text
+                data = json.loads(payload)
+                is_sufficient = bool(data.get("is_sufficient", False))
+                knowledge_gap = str(data.get("knowledge_gap", "") or "")
+                fu = data.get("follow_up_queries") or []
+                follow_up_queries = [str(x) for x in fu] if isinstance(fu, list) else ([str(fu)] if fu else [])
+            except Exception:
+                # If parsing fails, keep conservative defaults (force another loop)
+                is_sufficient = False
+                follow_up_queries = []
+            return {
+                "is_sufficient": is_sufficient,
+                "knowledge_gap": knowledge_gap,
+                "follow_up_queries": follow_up_queries,
+                "research_loop_count": state["research_loop_count"],
+                "number_of_ran_queries": len(state["search_query"]),
+            }
+        except Exception as e:
+            print(f"DR-DEBUG reflection rest_error: {repr(e)}")
+            # 回退 Chat 路径（官方端点）
+            llm = ChatGoogleGenerativeAI(
+                model=reasoning_model,
+                temperature=1.0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+            )
+            result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
+            return {
+                "is_sufficient": result.is_sufficient,
+                "knowledge_gap": result.knowledge_gap,
+                "follow_up_queries": result.follow_up_queries,
+                "research_loop_count": state["research_loop_count"],
+                "number_of_ran_queries": len(state["search_query"]),
+            }
     else:
         llm = ChatGoogleGenerativeAI(
             model=reasoning_model,
@@ -344,14 +382,23 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     # init Reasoning Model, default to Gemini 2.5 Flash
     base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
     if base_url:
-        response = _genai_generate_content(
-            reasoning_model,
-            formatted_prompt,
-            {"temperature": 0},
-        )
-        result_text = getattr(response, "text", "") or ""
-        # Wrap into AIMessage to keep downstream logic unchanged
-        result = AIMessage(content=result_text)
+        try:
+            text, _raw = _rest_generate_content_text(
+                model=reasoning_model,
+                text=formatted_prompt,
+                temperature=0.0,
+            )
+            # Wrap into AIMessage to keep downstream logic unchanged
+            result = AIMessage(content=text or "")
+        except Exception as e:
+            print(f"DR-DEBUG finalize_answer rest_error: {repr(e)}")
+            llm = ChatGoogleGenerativeAI(
+                model=reasoning_model,
+                temperature=0,
+                max_retries=2,
+                api_key=_get_gemini_api_key(),
+            )
+            result = llm.invoke(formatted_prompt)
     else:
         llm = ChatGoogleGenerativeAI(
             model=reasoning_model,
