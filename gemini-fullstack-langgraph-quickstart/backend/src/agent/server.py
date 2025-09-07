@@ -3,6 +3,9 @@ from __future__ import annotations
 import pathlib
 import os
 import json
+import urllib.request
+import urllib.error
+import urllib.parse
 from typing import Any, Dict, Optional, List
 
 from fastapi import FastAPI, Response, HTTPException
@@ -113,20 +116,16 @@ async def classify(req: ClassifyRequest):
         # 否则回退为最后一项
         return {"category": candidates[-1], "confidence": 0.5}
 
-    api_key = os.getenv("GEMINI_API_KEY", "").strip()
-    if not api_key:
-        # 无 API Key 时退化为启发式分类
-        return heuristic_choice()
-
     try:
         # 低温度/严格 JSON 输出提示，尽量减少跑长链路的开销
+        kind = (os.getenv("CLASSIFIER_KIND") or "gemini").strip().lower()
         model_name = os.getenv("CLASSIFIER_MODEL", "gemini-2.0-flash").strip()
-        llm = ChatGoogleGenerativeAI(
-            model=model_name,
-            temperature=0,
-            max_retries=2,
-            api_key=api_key,
-        )
+        # BaseURL 优先 CLASSIFIER_BASE_URL，留空回退到 DEEPRESEARCH_AI_BASE_URL
+        base_url = (os.getenv("CLASSIFIER_BASE_URL") or os.getenv("DEEPRESEARCH_AI_BASE_URL") or "").strip()
+        # Token 优先 CLASSIFIER_TOKEN；当 KIND=gemini 且为空时回退 GEMINI_API_KEY；其他 KIND 不回退
+        token = (os.getenv("CLASSIFIER_TOKEN") or "").strip()
+        gemini_api_key = os.getenv("GEMINI_API_KEY", "").strip()
+ 
         instructions = (
             "你是一个分类器。仅从给定候选集中选择一个最适合的分类，"
             "并仅返回JSON：{\"category\":\"<候选之一>\",\"confidence\":<0到1之间的小数>}。"
@@ -138,9 +137,88 @@ async def classify(req: ClassifyRequest):
             f"待分类文本: {text}\n"
             f"{req.extra_instructions or ''}"
         )
-        result = llm.invoke(prompt)
-        content = getattr(result, "content", "") or ""
-
+ 
+        # 1) Gemini 模式（google.genai 客户端，支持自定义 base_url；token 回退 GEMINI_API_KEY）
+        if kind == "gemini":
+            api_key = token or gemini_api_key
+            if not api_key:
+                return heuristic_choice()
+            try:
+                from google.genai import Client
+                client = Client(api_key=api_key, base_url=base_url) if base_url else Client(api_key=api_key)
+                response = client.models.generate_content(
+                    model=model_name, contents=prompt, config={"temperature": 0}
+                )
+                content = getattr(response, "text", "") or ""
+            except Exception:
+                return heuristic_choice()
+ 
+        # 2) OpenAI 兼容模式（/v1/chat/completions），仅当提供了 CLASSIFIER_TOKEN 时启用
+        elif kind == "openai_compat":
+            if not token:
+                return heuristic_choice()
+            b = base_url or "https://api.openai.com/v1"
+            b = b.rstrip("/")
+            if not b.endswith("/v1"):
+                if not b.endswith("v1"):
+                    b = b + "/v1"
+            url = b + "/chat/completions"
+            body = json.dumps(
+                {
+                    "model": model_name,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "temperature": 0,
+                }
+            ).encode("utf-8")
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json",
+            }
+            try:
+                req_ = urllib.request.Request(url, data=body, headers=headers, method="POST")
+                with urllib.request.urlopen(req_, timeout=30) as resp:
+                    resp_text = resp.read().decode("utf-8", "ignore")
+                obj = json.loads(resp_text)
+                content = (
+                    ((obj.get("choices") or [{}])[0].get("message") or {}).get("content")
+                    or ""
+                )
+            except Exception:
+                return heuristic_choice()
+ 
+        # 3) 自建服务模式：POST {base}/classify
+        elif kind == "service":
+            if not base_url:
+                return heuristic_choice()
+            url = base_url.rstrip("/") + "/classify"
+            payload = json.dumps(
+                {
+                    "text": text,
+                    "candidates": candidates,
+                    "language": req.language or "zh-CN",
+                }
+            ).encode("utf-8")
+            headers = {"Content-Type": "application/json"}
+            try:
+                req_ = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+                with urllib.request.urlopen(req_, timeout=30) as resp:
+                    resp_text = resp.read().decode("utf-8", "ignore")
+                data = json.loads(resp_text)
+                cat = (data.get("category") or "").strip()
+                try:
+                    conf = float(data.get("confidence", 0.7))
+                except Exception:
+                    conf = 0.7
+                if not cat or cat not in candidates:
+                    return heuristic_choice()
+                return {"category": cat, "confidence": max(0.0, min(conf, 1.0))}
+            except Exception:
+                return heuristic_choice()
+ 
+        else:
+            return heuristic_choice()
+ 
+        # 统一解析 content 中的 JSON
         data = None
         try:
             start = content.find("{")
@@ -149,7 +227,7 @@ async def classify(req: ClassifyRequest):
                 data = json.loads(content[start : end + 1])
         except Exception:
             data = None
-
+ 
         if isinstance(data, dict) and isinstance(data.get("category"), str):
             cat = data.get("category", "").strip()
             try:
