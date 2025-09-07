@@ -86,7 +86,7 @@ pip install -r Flow/requirements.txt
 REPO_B=owner/DeepResearch-Archive
 DEEPRESEARCH_BASE_URL=http://localhost:8123
 TZ=Asia/Shanghai
-# DEEPRESEARCH_AI_BASE_URL=      # DeepResearch 引擎 AI 调用 BaseURL；留空使用默认（gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1），可指向自有中转站。
+# DEEPRESEARCH_AI_BASE_URL=      # DeepResearch 引擎 AI 调用 BaseURL；留空使用默认（gemini→https://generativelanguage.googleapis.com），可指向自有中转站。
 
 # 可选：开启 AI 分类
 # CLASSIFY_WITH_AI=false
@@ -122,7 +122,7 @@ Secrets（机密）
 
 Variables（非机密）
 - GEMINI_MODEL: 默认 gemini-2.5-flash（引擎统一切换）
-- DEEPRESEARCH_AI_BASE_URL: DeepResearch 引擎 AI 调用 BaseURL（留空使用默认：gemini→https://generativelanguage.googleapis.com；openai_compat→https://api.openai.com/v1）
+- DEEPRESEARCH_AI_BASE_URL: DeepResearch 引擎 AI 调用 BaseURL（留空使用默认：gemini→https://generativelanguage.googleapis.com）
 - CLASSIFY_WITH_AI: 是否启用 AI 分类（默认 false）
 - CLASSIFIER_KIND: 分类后端类型（默认 gemini，可选 openai_compat/service）
 - CLASSIFIER_BASE_URL: 分类服务 BaseURL（留空时按 KIND 使用官方默认）
