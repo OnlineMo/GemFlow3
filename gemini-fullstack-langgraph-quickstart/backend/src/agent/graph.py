@@ -1,4 +1,5 @@
 import os
+import json
 
 from agent.tools_and_schemas import SearchQueryList, Reflection
 from dotenv import load_dotenv
@@ -60,33 +61,6 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
     if state.get("initial_search_query_count") is None:
         state["initial_search_query_count"] = configurable.number_of_initial_queries
 
-    # init Gemini 2.0 Flash
-    base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
-    if base_url:
-        try:
-            llm = ChatGoogleGenerativeAI(
-                model=configurable.query_generator_model,
-                temperature=1.0,
-                max_retries=2,
-                api_key=_get_gemini_api_key(),
-                base_url=base_url,
-            )
-        except TypeError:
-            llm = ChatGoogleGenerativeAI(
-                model=configurable.query_generator_model,
-                temperature=1.0,
-                max_retries=2,
-                api_key=_get_gemini_api_key(),
-            )
-    else:
-        llm = ChatGoogleGenerativeAI(
-            model=configurable.query_generator_model,
-            temperature=1.0,
-            max_retries=2,
-            api_key=_get_gemini_api_key(),
-        )
-    structured_llm = llm.with_structured_output(SearchQueryList)
-
     # Format the prompt
     current_date = get_current_date()
     formatted_prompt = query_writer_instructions.format(
@@ -94,9 +68,47 @@ def generate_query(state: OverallState, config: RunnableConfig) -> QueryGenerati
         research_topic=get_research_topic(state["messages"]),
         number_queries=state["initial_search_query_count"],
     )
-    # Generate the search queries
-    result = structured_llm.invoke(formatted_prompt)
-    return {"search_query": result.query}
+
+    # If a custom Gemini-compatible base URL is provided, use google.genai Client to ensure routing via the relay.
+    base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
+    if base_url:
+        client = Client(api_key=_get_gemini_api_key(), base_url=base_url)
+        json_prompt = (
+            formatted_prompt
+            + "\n\n仅返回一个JSON对象，格式严格为：{\"query\": [\"...\"]}。不要输出任何额外文本。"
+        )
+        response = client.models.generate_content(
+            model=configurable.query_generator_model,
+            contents=json_prompt,
+            config={"temperature": 1.0},
+        )
+        text = getattr(response, "text", "") or ""
+        queries: list[str] = []
+        try:
+            start = text.find("{")
+            end = text.rfind("}")
+            payload = text[start : end + 1] if start != -1 and end != -1 and end > start else text
+            data = json.loads(payload)
+            q = data.get("query") or data.get("queries") or []
+            if isinstance(q, list):
+                queries = [str(item) for item in q]
+            elif q:
+                queries = [str(q)]
+        except Exception:
+            # Fallback: split lines
+            queries = [line.strip("- ").strip() for line in text.splitlines() if line.strip()]
+
+        return {"search_query": queries or []}
+    else:
+        llm = ChatGoogleGenerativeAI(
+            model=configurable.query_generator_model,
+            temperature=1.0,
+            max_retries=2,
+            api_key=_get_gemini_api_key(),
+        )
+        structured_llm = llm.with_structured_output(SearchQueryList)
+        result = structured_llm.invoke(formatted_prompt)
+        return {"search_query": result.query}
 
 
 def continue_to_web_research(state: QueryGenerationState):
@@ -186,21 +198,43 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
     # init Reasoning Model
     base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
     if base_url:
+        client = Client(api_key=_get_gemini_api_key(), base_url=base_url)
+        json_prompt = (
+            formatted_prompt
+            + "\n\n仅返回一个JSON对象，严格包含字段："
+            + "{\"is_sufficient\": <true|false>, \"knowledge_gap\": \"...\", \"follow_up_queries\": [\"...\"]}。"
+            + "不要输出任何额外文本。"
+        )
+        response = client.models.generate_content(
+            model=reasoning_model,
+            contents=json_prompt,
+            config={"temperature": 1.0},
+        )
+        text = getattr(response, "text", "") or ""
+        is_sufficient = False
+        knowledge_gap = ""
+        follow_up_queries: list[str] = []
         try:
-            llm = ChatGoogleGenerativeAI(
-                model=reasoning_model,
-                temperature=1.0,
-                max_retries=2,
-                api_key=_get_gemini_api_key(),
-                base_url=base_url,
-            )
-        except TypeError:
-            llm = ChatGoogleGenerativeAI(
-                model=reasoning_model,
-                temperature=1.0,
-                max_retries=2,
-                api_key=_get_gemini_api_key(),
-            )
+            start = text.find("{")
+            end = text.rfind("}")
+            payload = text[start : end + 1] if start != -1 and end != -1 and end > start else text
+            data = json.loads(payload)
+            is_sufficient = bool(data.get("is_sufficient", False))
+            knowledge_gap = str(data.get("knowledge_gap", "") or "")
+            fu = data.get("follow_up_queries") or []
+            follow_up_queries = [str(x) for x in fu] if isinstance(fu, list) else ([str(fu)] if fu else [])
+        except Exception:
+            # If parsing fails, keep conservative defaults (force another loop)
+            is_sufficient = False
+            follow_up_queries = []
+
+        return {
+            "is_sufficient": is_sufficient,
+            "knowledge_gap": knowledge_gap,
+            "follow_up_queries": follow_up_queries,
+            "research_loop_count": state["research_loop_count"],
+            "number_of_ran_queries": len(state["search_query"]),
+        }
     else:
         llm = ChatGoogleGenerativeAI(
             model=reasoning_model,
@@ -208,15 +242,14 @@ def reflection(state: OverallState, config: RunnableConfig) -> ReflectionState:
             max_retries=2,
             api_key=_get_gemini_api_key(),
         )
-    result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
-
-    return {
-        "is_sufficient": result.is_sufficient,
-        "knowledge_gap": result.knowledge_gap,
-        "follow_up_queries": result.follow_up_queries,
-        "research_loop_count": state["research_loop_count"],
-        "number_of_ran_queries": len(state["search_query"]),
-    }
+        result = llm.with_structured_output(Reflection).invoke(formatted_prompt)
+        return {
+            "is_sufficient": result.is_sufficient,
+            "knowledge_gap": result.knowledge_gap,
+            "follow_up_queries": result.follow_up_queries,
+            "research_loop_count": state["research_loop_count"],
+            "number_of_ran_queries": len(state["search_query"]),
+        }
 
 
 def evaluate_research(
@@ -283,21 +316,15 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
     # init Reasoning Model, default to Gemini 2.5 Flash
     base_url = os.getenv("DEEPRESEARCH_AI_BASE_URL", "").strip()
     if base_url:
-        try:
-            llm = ChatGoogleGenerativeAI(
-                model=reasoning_model,
-                temperature=0,
-                max_retries=2,
-                api_key=_get_gemini_api_key(),
-                base_url=base_url,
-            )
-        except TypeError:
-            llm = ChatGoogleGenerativeAI(
-                model=reasoning_model,
-                temperature=0,
-                max_retries=2,
-                api_key=_get_gemini_api_key(),
-            )
+        client = Client(api_key=_get_gemini_api_key(), base_url=base_url)
+        response = client.models.generate_content(
+            model=reasoning_model,
+            contents=formatted_prompt,
+            config={"temperature": 0},
+        )
+        result_text = getattr(response, "text", "") or ""
+        # Wrap into AIMessage to keep downstream logic unchanged
+        result = AIMessage(content=result_text)
     else:
         llm = ChatGoogleGenerativeAI(
             model=reasoning_model,
@@ -305,7 +332,7 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
             max_retries=2,
             api_key=_get_gemini_api_key(),
         )
-    result = llm.invoke(formatted_prompt)
+        result = llm.invoke(formatted_prompt)
 
     # Replace the short urls with the original urls and add all used urls to the sources_gathered
     unique_sources = []
