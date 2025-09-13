@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import requests
 
 from agent.tools_and_schemas import SearchQueryList, Reflection
@@ -48,7 +49,7 @@ def _normalize_v1beta_base(raw: str) -> str:
         return b[:-3] + "v1beta"
     return b + "/v1beta"
 
-def _rest_generate_content_text(model: str, text: str, temperature: float = 0.0) -> tuple[str, dict]:
+def _rest_generate_content_text(model: str, text: str, temperature: float = 0.0, tools: list | None = None) -> tuple[str, dict]:
     """
     Generate content via REST: {base}/v1beta/models/{model}:generateContent?key=TOKEN
     Returns (text, raw_json)
@@ -56,10 +57,12 @@ def _rest_generate_content_text(model: str, text: str, temperature: float = 0.0)
     token = os.getenv("GEMINI_API_KEY", "").strip()
     base = _normalize_v1beta_base(os.getenv("DEEPRESEARCH_AI_BASE_URL", ""))
     url = f"{base}/models/{model}:generateContent?key={token}"
-    payload = {
+    payload: dict = {
         "contents": [{"parts": [{"text": text}]}],
         "generationConfig": {"temperature": temperature},
     }
+    if tools:
+        payload["tools"] = tools
     resp = requests.post(url, json=payload, timeout=60)
     resp.raise_for_status()
     data = resp.json() or {}
@@ -188,15 +191,57 @@ def web_research(state: WebSearchState, config: RunnableConfig) -> OverallState:
         research_topic=state["search_query"],
     )
 
-    # Uses REST; 若无法使用检索工具则直接生成简述，确保不中断
+    # Uses REST with google_search 工具，拿到 grounding 后生成可点击引文；失败则降级直出确保不中断
     try:
-        text, _raw = _rest_generate_content_text(
+        text, raw = _rest_generate_content_text(
             model=configurable.query_generator_model,
             text=formatted_prompt,
             temperature=0.0,
+            tools=[{"google_search": {}}],
         )
-        modified_text = text or ""
-        sources_gathered = []
+        base_text = text or ""
+        # 从 raw 中解析 grounding，构造 citations 与 sources_gathered
+        candidates = (raw.get("candidates") or [])
+        grounding = {}
+        if candidates:
+            grounding = (candidates[0].get("groundingMetadata") or {})
+        chunks = grounding.get("groundingChunks") or []
+        supports = grounding.get("groundingSupports") or []
+        # 构造 original_url -> short_id map（仍使用 vertexaisearch 形式占位，后续在 finalize 阶段替换为原始链接）
+        resolved_urls: dict[str, str] = {}
+        for idx, ch in enumerate(chunks):
+            url = ((ch.get("web") or {}).get("uri") or "").strip()
+            if url and url not in resolved_urls:
+                resolved_urls[url] = f"https://vertexaisearch.cloud.google.com/id/{state['id']}-{idx}"
+        # 生成 citations 结构，供插入与 sources_gathered 展平
+        citations = []
+        for sp in supports:
+            seg = sp.get("segment") or {}
+            start_index = int(seg.get("startIndex") or 0)
+            end_index = seg.get("endIndex")
+            if end_index is None:
+                continue
+            entry = {"start_index": start_index, "end_index": int(end_index), "segments": []}
+            for ind in (sp.get("groundingChunkIndices") or []):
+                try:
+                    ch = chunks[ind]
+                    web = ch.get("web") or {}
+                    url = (web.get("uri") or "").strip()
+                    title = (web.get("title") or "").strip()
+                    label = title.split(".")[:-1][0] if "." in title else (title or "source")
+                    short = resolved_urls.get(url) or url
+                    entry["segments"].append({"label": label, "short_url": short, "value": url})
+                except Exception:
+                    continue
+            citations.append(entry)
+        # 将引文标记插入正文
+        if citations:
+            modified_text = insert_citation_markers(base_text, citations)
+            # 展平 sources
+            sources_gathered = [item for c in citations for item in c.get("segments", [])]
+        else:
+            modified_text = base_text
+            sources_gathered = []
     except Exception as e:
         print(f"DR-DEBUG web_research rest_error: {repr(e)}")
         # 回退：无检索工具，直接请模型基于查询做简述，保证不中断
@@ -407,14 +452,37 @@ def finalize_answer(state: OverallState, config: RunnableConfig):
         )
         result = llm.invoke(formatted_prompt)
 
-    # Replace the short urls with the original urls and add all used urls to the sources_gathered
+    # Replace any vertexaisearch short URLs with original URLs, then build final sources list
+    sources_list = state.get("sources_gathered", []) or []
+    # Build short -> original map
+    short_to_orig = {}
+    for s in sources_list:
+        short = (s.get("short_url") or "").strip()
+        orig = (s.get("value") or "").strip()
+        if short and orig:
+            short_to_orig[short] = orig
+
+    # Regex-replace all vertexaisearch short links seen in the generated content
+    pattern = re.compile(r"https://vertexaisearch\.cloud\.google\.com/id/[A-Za-z0-9\-_]+")
+    def _repl(m):
+        k = m.group(0)
+        return short_to_orig.get(k, k)
+    if isinstance(result.content, str):
+        result.content = pattern.sub(_repl, result.content)
+
+    # Also do a direct replace pass for any remaining known shorts
+    for short, orig in short_to_orig.items():
+        if short in result.content:
+            result.content = result.content.replace(short, orig)
+
+    # Keep only sources that actually appear in the final content
     unique_sources = []
-    for source in state["sources_gathered"]:
-        if source["short_url"] in result.content:
-            result.content = result.content.replace(
-                source["short_url"], source["value"]
-            )
-            unique_sources.append(source)
+    seen = set()
+    for s in sources_list:
+        orig = (s.get("value") or "").strip()
+        if orig and (orig in result.content) and orig not in seen:
+            unique_sources.append(s)
+            seen.add(orig)
 
     return {
         "messages": [AIMessage(content=result.content)],
